@@ -1,0 +1,328 @@
+diff --git a/supabase/functions/jarvis-feed/index.ts b/supabase/functions/jarvis-feed/index.ts
+index 164376d..37bf24d 100644
+--- a/supabase/functions/jarvis-feed/index.ts
++++ b/supabase/functions/jarvis-feed/index.ts
+@@ -1,13 +1,14 @@
+ // deno-lint-ignore-file no-explicit-any
+-// Read-only feed for VIC's personal Jarvis app (separate Supabase project).
++// Feed for VIC's personal Jarvis app (separate Supabase project): reads shop
++// data for his brief, and lets Jarvis plan the staff schedule when VIC asks.
+ //
+ // Jarvis POSTs here with header x-jarvis-token = Jarvis's THRIFTIN_FEED_TOKEN.
+ // THRIFTIN only keeps its SHA-256 (table jarvis_feed_config, key
+ // token_sha256, service role only), so the token itself never lives here.
+ // (A JARVIS_FEED_TOKEN function secret also works.) verify_jwt is off; the
+-// token is the guard and is compared in constant time. Nothing is written.
++// token is the guard and is compared in constant time.
+ //
+-// Returns:
++// POST {} (no action): the read-only feed
+ //   shifts      next 14 days (date, user_name, hours, status) - first names only
+ //   web_orders  open web orders still to ship (order name, ship-by, item
+ //               count, total) - NO customer details (web_orders has none)
+@@ -15,15 +16,31 @@
+ //               90 days, revenue 30 days, average price 90 days, tagged items
+ //               in stock (null when the shop barely uses tagged stock) and
+ //               median days from added to sold (null if fewer than 3)
+-// Refunded sales are left out of every count.
++//   Refunded sales are left out of every count.
++//
++// POST {action, ...}: the schedule (same rules as the app's Schedule tab)
++//   schedule      {from?, to?}               shifts + day notes + active staff
++//   shift_set     {person, date, status?, hours?}   one shift per person per
++//                 day: updated if there is one, else created. status
++//                 scheduled (default) | worked | off. Staff who don't track
++//                 hours get none; hours default to the person's template.
++//   shift_remove  {person, date}
++//   day_note_set  {date, note?, split_day?}  updated_by "Jarvis (Vic)"; a day
++//                 with no note and no split loses its row, like the app.
++// Writes only shifts and day_notes, only for active staff, dates from 62
++// days back to a year ahead. Jarvis confirms each change with VIC first.
+ 
+ const SB_URL = Deno.env.get("SUPABASE_URL")!;
+ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+ const TOKEN = (Deno.env.get("JARVIS_FEED_TOKEN") ?? "").trim();
++const BY = "Jarvis (Vic)";
++const STATUSES = ["scheduled", "worked", "off"];
+ 
+ const json = (body: unknown, status = 200) =>
+   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+ 
++class Bad extends Error {}
++
+ function timingSafeEqual(a: string, b: string): boolean {
+   const x = new TextEncoder().encode(a), y = new TextEncoder().encode(b);
+   let diff = x.length ^ y.length;
+@@ -31,12 +48,24 @@ function timingSafeEqual(a: string, b: string): boolean {
+   return diff === 0;
+ }
+ 
++const auth = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` };
++
+ async function rest(path: string): Promise<any[]> {
+-  const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } });
++  const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: auth });
+   if (!r.ok) throw new Error(`${path.split("?")[0]}: ${r.status} ${await r.text()}`);
+   return await r.json();
+ }
+ 
++async function write(method: string, path: string, body?: unknown, prefer = "return=representation"): Promise<any[]> {
++  const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
++    method, headers: { ...auth, "Content-Type": "application/json", Prefer: prefer },
++    body: body === undefined ? undefined : JSON.stringify(body),
++  });
++  if (!r.ok) throw new Error(`${method} ${path.split("?")[0]}: ${r.status} ${await r.text()}`);
++  const t = await r.text();
++  return t ? JSON.parse(t) : [];
++}
++
+ // All rows, 1000 at a time (PostgREST's page cap).
+ async function restAll(path: string): Promise<any[]> {
+   const out: any[] = [];
+@@ -72,70 +101,188 @@ async function authorized(given: string): Promise<boolean> {
+   return stored.length === 64 && timingSafeEqual(await sha256Hex(given), stored);
+ }
+ 
++// ── Read-only feed (unchanged) ───────────────────────────────────────────
++async function feed() {
++  const today = stockholmDate(new Date());
++  const d30 = addDays(today, -30), d60 = addDays(today, -60), d90 = addDays(today, -90);
++
++  const [shifts, orders, cats, sales, stock, sold] = await Promise.all([
++    rest(`shifts?select=date,user_name,hours,status&date=gte.${today}&date=lte.${addDays(today, 13)}&order=date.asc,user_name.asc`),
++    rest(`web_orders?select=order_name,ordered_at,ship_by,lines,total,currency,shipping_method,fulfillment_status,financial_status&cancelled_at=is.null&shipped_at=is.null&order=ship_by.asc&limit=200`),
++    rest(`categories?select=id,name,active`),
++    restAll(`sales?select=category_id,category_name,sold_at,price&sold_at=gt.${d90}&refunded_at=is.null&order=sold_at.asc`),
++    restAll(`inventory?select=category_id,category_name&status=eq.in_stock`),
++    restAll(`inventory?select=category_id,category_name,added_at,sold_at&status=eq.sold&sold_at=gte.${addDays(today, -180)}T00:00:00Z`),
++  ]);
++
++  const toShip = orders.filter((o: any) =>
++    o.fulfillment_status !== "fulfilled" && !["refunded", "voided"].includes(String(o.financial_status ?? "")));
++
++  const names = new Map(cats.map((c: any) => [c.id, c.name]));
++  const nameOf = (r: any) => names.get(r.category_id) ?? r.category_name ?? "Other";
++  // Tagged stock is only meaningful once the shop actually tags items.
++  const tracksStock = stock.length + sold.length >= 20;
++
++  const by = new Map<string, any>();
++  const get = (name: string) => {
++    if (!by.has(name)) by.set(name, { category: name, sold_30: 0, sold_prev_30: 0, sold_90: 0, revenue_30: 0, _prices: [] as number[], _days: [] as number[], in_stock: tracksStock ? 0 : null });
++    return by.get(name);
++  };
++  for (const s of sales) {
++    const c = get(nameOf(s));
++    const day = String(s.sold_at);
++    const price = Number(s.price) || 0;
++    c.sold_90++;
++    if (price > 0) c._prices.push(price);
++    if (day > d30) { c.sold_30++; c.revenue_30 += price; } else if (day > d60) c.sold_prev_30++;
++  }
++  if (tracksStock) for (const i of stock) get(nameOf(i)).in_stock++;
++  for (const i of sold) {
++    if (!i.added_at || !i.sold_at) continue;
++    const days = (Date.parse(i.sold_at) - Date.parse(i.added_at)) / 86400000;
++    if (days >= 0) get(nameOf(i))._days.push(days);
++  }
++  const categories = [...by.values()].map((c) => ({
++    category: c.category, sold_30: c.sold_30, sold_prev_30: c.sold_prev_30, sold_90: c.sold_90,
++    revenue_30: Math.round(c.revenue_30),
++    avg_price_90: c._prices.length ? Math.round(c._prices.reduce((a: number, b: number) => a + b, 0) / c._prices.length) : null,
++    in_stock: c.in_stock,
++    median_days_to_sell: c._days.length >= 3 ? Math.round(median(c._days) * 10) / 10 : null,
++  })).sort((a, b) => b.sold_30 - a.sold_30);
++
++  return {
++    generated_at: new Date().toISOString(),
++    shifts: shifts.map((s: any) => ({ date: s.date, user_name: s.user_name, hours: s.hours == null ? null : Number(s.hours), status: s.status })),
++    web_orders: toShip.map((o: any) => ({
++      order_name: o.order_name, ordered_at: o.ordered_at, ship_by: o.ship_by,
++      items: (o.lines ?? []).reduce((n: number, l: any) => n + (Number(l.quantity) || 1), 0),
++      total: o.total == null ? null : Number(o.total), currency: o.currency, shipping_method: o.shipping_method,
++    })),
++    categories,
++  };
++}
++
++// ── Schedule ─────────────────────────────────────────────────────────────
++const WD_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
++const weekdayKey = (date: string) => WD_KEYS[new Date(`${date}T12:00:00Z`).getUTCDay()];
++
++function day(v: unknown, what = "date", today = stockholmDate(new Date())): string {
++  const s = String(v ?? "").trim();
++  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
++  const t = m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : null;
++  if (!m || !t || t.getUTCMonth() !== +m[2] - 1 || t.getUTCDate() !== +m[3]) throw new Bad(`${what} must be a real date YYYY-MM-DD (got "${s}")`);
++  if (s < addDays(today, -62) || s > addDays(today, 366)) throw new Bad(`${what} ${s} is too far back or ahead (62 days back to a year ahead)`);
++  return s;
++}
++
++async function activeStaff(): Promise<any[]> {
++  return await rest(`users?select=id,name,tracks_hours,hours_template&active=eq.true&order=name.asc`);
++}
++
++function person(staff: any[], who: unknown): any {
++  const k = String(who ?? "").trim().toLowerCase();
++  if (!k) throw new Bad("person is empty");
++  const exact = staff.filter((u) => String(u.name ?? "").trim().toLowerCase() === k);
++  const hits = exact.length ? exact : staff.filter((u) => String(u.name ?? "").trim().toLowerCase().startsWith(k));
++  if (hits.length === 1) return hits[0];
++  const names = staff.map((u) => u.name).join(", ");
++  throw new Bad(hits.length ? `"${who}" matches more than one person: ${hits.map((u) => u.name).join(", ")}` : `No active staff called "${who}". Staff: ${names || "none"}`);
++}
++
++function templateHours(u: any, date: string): number | null {
++  const v = u?.hours_template?.[weekdayKey(date)];
++  return v === 0 || (v != null && v !== "") ? Number(v) : null;
++}
++
++const shiftOut = (s: any) => s && ({ date: s.date, user_name: s.user_name, status: s.status, hours: s.hours == null ? null : Number(s.hours) });
++
++async function schedule(b: any) {
++  const today = stockholmDate(new Date());
++  const from = b.from ? day(b.from, "from", today) : today;
++  const to = b.to ? day(b.to, "to", today) : addDays(from, 13);
++  if (to < from) throw new Bad("to is before from");
++  if (to > addDays(from, 62)) throw new Bad("at most 62 days at a time");
++  const [shifts, notes, staff] = await Promise.all([
++    rest(`shifts?select=date,user_name,hours,status&date=gte.${from}&date=lte.${to}&order=date.asc,user_name.asc`),
++    rest(`day_notes?select=date,note,split_day,updated_by&date=gte.${from}&date=lte.${to}&order=date.asc`),
++    activeStaff(),
++  ]);
++  return {
++    from, to,
++    shifts: shifts.map(shiftOut),
++    day_notes: notes.map((n: any) => ({ date: n.date, note: n.note ?? "", split_day: !!n.split_day, updated_by: n.updated_by ?? null })),
++    staff: staff.map((u: any) => ({ name: u.name, tracks_hours: !!u.tracks_hours, hours_template: u.hours_template ?? null })),
++  };
++}
++
++async function shiftSet(b: any) {
++  const date = day(b.date);
++  const u = person(await activeStaff(), b.person);
++  const status = b.status == null || b.status === "" ? "scheduled" : String(b.status).trim().toLowerCase();
++  if (!STATUSES.includes(status)) throw new Bad(`status must be one of ${STATUSES.join(", ")}`);
++  let hours: number | null = null;
++  if (status !== "off" && u.tracks_hours) {
++    if (b.hours != null && b.hours !== "") {
++      const h = Number(b.hours);
++      if (!Number.isFinite(h) || h < 0 || h > 24) throw new Bad("hours must be a number from 0 to 24");
++      hours = Math.round(h * 4) / 4;
++    } else {
++      hours = templateHours(u, date);
++    }
++    if (status === "worked" && !hours) throw new Bad(`say how many hours ${u.name} worked`);
++  }
++  const before = (await rest(`shifts?select=id,date,user_name,hours,status&user_id=eq.${u.id}&date=eq.${date}`))[0] ?? null;
++  const row = before
++    ? (await write("PATCH", `shifts?id=eq.${before.id}`, { status, hours }))[0]
++    : (await write("POST", "shifts", { user_id: u.id, user_name: u.name, date, status, hours }))[0];
++  return { ok: true, change: before ? "updated" : "created", before: shiftOut(before), shift: shiftOut(row) };
++}
++
++async function shiftRemove(b: any) {
++  const date = day(b.date);
++  const u = person(await activeStaff(), b.person);
++  const removed = await write("DELETE", `shifts?user_id=eq.${u.id}&date=eq.${date}`);
++  return { ok: true, removed: removed.length, shift: shiftOut(removed[0] ?? null), person: u.name, date };
++}
++
++async function dayNoteSet(b: any) {
++  const date = day(b.date);
++  if (b.note === undefined && b.split_day === undefined) throw new Bad("give a note and/or split_day");
++  const ex = (await rest(`day_notes?select=id,date,note,split_day&date=eq.${date}`))[0] ?? null;
++  const note = b.note !== undefined ? String(b.note ?? "").trim() : String(ex?.note ?? "");
++  if (note.length > 2000) throw new Bad("note is too long (max 2000 characters)");
++  const split = b.split_day !== undefined ? !!b.split_day : !!ex?.split_day;
++  if (ex && !note && !split) {
++    await write("DELETE", `day_notes?id=eq.${ex.id}`);
++    return { ok: true, change: "cleared", date };
++  }
++  if (ex) {
++    const row = (await write("PATCH", `day_notes?id=eq.${ex.id}`, { note, split_day: split, updated_by: BY, updated_at: new Date().toISOString() }))[0];
++    return { ok: true, change: "updated", date, note: row?.note ?? note, split_day: !!(row?.split_day ?? split) };
++  }
++  if (!note && !split) return { ok: true, change: "nothing", date };
++  const row = (await write("POST", "day_notes", { date, note, split_day: split, updated_by: BY }))[0];
++  return { ok: true, change: "created", date, note: row?.note ?? note, split_day: !!(row?.split_day ?? split) };
++}
++
+ Deno.serve(async (req) => {
+   let ok = false;
+   try { ok = await authorized((req.headers.get("x-jarvis-token") ?? "").trim()); } catch (e) { console.error("jarvis-feed auth:", e); }
+   if (!ok) return json({ error: "unauthorized" }, 401);
++  const b: any = req.method === "POST" ? await req.json().catch(() => ({})) : {};
++  const action = typeof b?.action === "string" ? b.action : "";
+   try {
+-    const today = stockholmDate(new Date());
+-    const d30 = addDays(today, -30), d60 = addDays(today, -60), d90 = addDays(today, -90);
+-
+-    const [shifts, orders, cats, sales, stock, sold] = await Promise.all([
+-      rest(`shifts?select=date,user_name,hours,status&date=gte.${today}&date=lte.${addDays(today, 13)}&order=date.asc,user_name.asc`),
+-      rest(`web_orders?select=order_name,ordered_at,ship_by,lines,total,currency,shipping_method,fulfillment_status,financial_status&cancelled_at=is.null&shipped_at=is.null&order=ship_by.asc&limit=200`),
+-      rest(`categories?select=id,name,active`),
+-      restAll(`sales?select=category_id,category_name,sold_at,price&sold_at=gt.${d90}&refunded_at=is.null&order=sold_at.asc`),
+-      restAll(`inventory?select=category_id,category_name&status=eq.in_stock`),
+-      restAll(`inventory?select=category_id,category_name,added_at,sold_at&status=eq.sold&sold_at=gte.${addDays(today, -180)}T00:00:00Z`),
+-    ]);
+-
+-    const toShip = orders.filter((o: any) =>
+-      o.fulfillment_status !== "fulfilled" && !["refunded", "voided"].includes(String(o.financial_status ?? "")));
+-
+-    const names = new Map(cats.map((c: any) => [c.id, c.name]));
+-    const nameOf = (r: any) => names.get(r.category_id) ?? r.category_name ?? "Other";
+-    // Tagged stock is only meaningful once the shop actually tags items.
+-    const tracksStock = stock.length + sold.length >= 20;
+-
+-    const by = new Map<string, any>();
+-    const get = (name: string) => {
+-      if (!by.has(name)) by.set(name, { category: name, sold_30: 0, sold_prev_30: 0, sold_90: 0, revenue_30: 0, _prices: [] as number[], _days: [] as number[], in_stock: tracksStock ? 0 : null });
+-      return by.get(name);
+-    };
+-    for (const s of sales) {
+-      const c = get(nameOf(s));
+-      const day = String(s.sold_at);
+-      const price = Number(s.price) || 0;
+-      c.sold_90++;
+-      if (price > 0) c._prices.push(price);
+-      if (day > d30) { c.sold_30++; c.revenue_30 += price; } else if (day > d60) c.sold_prev_30++;
+-    }
+-    if (tracksStock) for (const i of stock) get(nameOf(i)).in_stock++;
+-    for (const i of sold) {
+-      if (!i.added_at || !i.sold_at) continue;
+-      const days = (Date.parse(i.sold_at) - Date.parse(i.added_at)) / 86400000;
+-      if (days >= 0) get(nameOf(i))._days.push(days);
++    switch (action) {
++      case "": case "feed": return json(await feed());
++      case "schedule": return json(await schedule(b));
++      case "shift_set": return json(await shiftSet(b));
++      case "shift_remove": return json(await shiftRemove(b));
++      case "day_note_set": return json(await dayNoteSet(b));
++      default: return json({ error: `unknown action "${action}"` }, 400);
+     }
+-    const categories = [...by.values()].map((c) => ({
+-      category: c.category, sold_30: c.sold_30, sold_prev_30: c.sold_prev_30, sold_90: c.sold_90,
+-      revenue_30: Math.round(c.revenue_30),
+-      avg_price_90: c._prices.length ? Math.round(c._prices.reduce((a: number, b: number) => a + b, 0) / c._prices.length) : null,
+-      in_stock: c.in_stock,
+-      median_days_to_sell: c._days.length >= 3 ? Math.round(median(c._days) * 10) / 10 : null,
+-    })).sort((a, b) => b.sold_30 - a.sold_30);
+-
+-    return json({
+-      generated_at: new Date().toISOString(),
+-      shifts: shifts.map((s: any) => ({ date: s.date, user_name: s.user_name, hours: s.hours == null ? null : Number(s.hours), status: s.status })),
+-      web_orders: toShip.map((o: any) => ({
+-        order_name: o.order_name, ordered_at: o.ordered_at, ship_by: o.ship_by,
+-        items: (o.lines ?? []).reduce((n: number, l: any) => n + (Number(l.quantity) || 1), 0),
+-        total: o.total == null ? null : Number(o.total), currency: o.currency, shipping_method: o.shipping_method,
+-      })),
+-      categories,
+-    });
+   } catch (e) {
+-    console.error("jarvis-feed:", e);
+-    return json({ error: "feed failed" }, 500);
++    if (e instanceof Bad) return json({ error: e.message }, 400);
++    console.error("jarvis-feed:", action || "feed", e);
++    return json({ error: action ? `${action} failed` : "feed failed" }, 500);
+   }
+ });
