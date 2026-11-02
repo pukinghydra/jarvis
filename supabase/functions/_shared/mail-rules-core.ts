@@ -10,6 +10,12 @@
 //  2. Vinted is noise, except a return VIC has to send: Vinted mail with no
 //     sign of a return is noise right here; with one, Claude decides return
 //     vs not, and code turns a return into one THRIFTIN item.
+//  4. Notification mails are noise: GitHub, Supabase, Vercel, Anthropic,
+//     Microsoft/Azure account mail, Google, Apple, app stores, banks'
+//     "new login / statement ready", shipping-status pings, social media
+//     (sender domains below, or notifications@ / notify@ / alerts@ /
+//     updates@ addresses). Kept for Claude: anything asking VIC to pay or
+//     with a real deadline only he can act on (invoice due, Skatteverket).
 //  3. Already answered: VIC replied (or forwarded) after it arrived, read
 //     from Outlook's last-verb property (0x1081) or a Sent Items message in
 //     the same conversation sent after it. Answered mail is handled: never
@@ -24,7 +30,8 @@ import { addDays, localDateStr, localTimeStr, localToUtc, parseDateStr } from ".
 
 export const DEFAULT_MAIL_RULES = `1. Massutskick är brus: nyhetsbrev, reklam, mallade notiser och allt som skickas till många (copy-paste). / Mass or copy-paste mail (newsletters, marketing, templated notifications) is noise.
 2. Vinted: allt från Vinted är brus UTOM en retur jag måste skicka (returförfrågan, "retur", "skicka tillbaka", returetikett, sista dag för retur). Den är viktig och blir en uppgift "Skicka Vinted-retur: <vara>" med deadline. / Everything from Vinted is noise except a return I have to send.
-3. Redan besvarat: har jag svarat i samma tråd efter att mejlet kom är det klart. Visa det inte som viktigt och skriv inget utkast. / If I already replied in the thread after it arrived, it is handled.`;
+3. Redan besvarat: har jag svarat i samma tråd efter att mejlet kom är det klart. Visa det inte som viktigt och skriv inget utkast. / If I already replied in the thread after it arrived, it is handled.
+4. Alla notismejl är brus: GitHub, Supabase, Vercel, Anthropic/Claude, Microsoft-konto/Azure, Google, Apple, appbutiker, bankernas "ny inloggning / kontoutdrag klart", leveransstatus och notiser från sociala medier. Undantag: Vinted-returer (regel 2) och allt som ber mig betala eller har en riktig deadline som bara jag kan agera på (t.ex. faktura som förfaller, Skatteverket). / All notification mail is noise, except Vinted returns and anything asking me to pay or with a real deadline only I can act on.`;
 
 export type Header = { name?: unknown; value?: unknown };
 
@@ -73,7 +80,37 @@ export function ignoreMatch(address: string | null | undefined, ignore: unknown)
   return vipMatch(address ?? null, list);
 }
 
-const MONEY_OR_AUTHORITY = /(skatteverket|kronofogden|inkasso|försäkringskassan|tullverket|polisen|faktura|betala|betalning|förfaller|sista dag|påminnelse|overdue|invoice|payment due|bankid)/i;
+const MONEY_OR_AUTHORITY = /(skatteverket|kronofogden|inkasso|försäkringskassan|tullverket|polisen|faktura|betala|betalning|förfaller|förfallodag|sista dag|påminnelse|overdue|invoice|payment due|pay now|due date|deadline|last day|\bsenast\b|bankid)/i;
+
+// Rule 4: senders whose mail is notifications (domain or any subdomain).
+// Personal-mail domains (gmail.com, hotmail.com, outlook.com, icloud.com)
+// are deliberately NOT here: people write from those.
+export const NOTIFICATION_DOMAINS = [
+  // dev / hosting / AI
+  "github.com", "supabase.com", "supabase.io", "vercel.com", "anthropic.com", "claude.com", "claude.ai",
+  // big accounts and app stores
+  "microsoft.com", "microsoftonline.com", "azure.com", "office.com", "google.com", "youtube.com", "apple.com", "itunes.com",
+  // banks and payments ("new login", "statement ready")
+  "swedbank.se", "seb.se", "handelsbanken.se", "nordea.se", "nordea.com", "danskebank.se", "lansforsakringar.se", "icabanken.se",
+  "skandia.se", "avanza.se", "revolut.com", "wise.com", "paypal.com", "klarna.com", "zettle.com",
+  // shipping status
+  "postnord.se", "postnord.com", "dhl.com", "dhl.se", "budbee.com", "instabox.se", "instabox.io", "airmee.com", "ups.com", "fedex.com", "bring.se", "dbschenker.com",
+  // social media
+  "facebookmail.com", "facebook.com", "instagram.com", "tiktok.com", "linkedin.com", "x.com", "twitter.com", "snapchat.com", "pinterest.com", "discord.com", "slack.com",
+];
+const NOTIFY_LOCAL = /^(notifications?|notify|notiser|alerts?|updates?|security|account-security|accountprotection|security-noreply|account-security-noreply)$/i;
+
+// Why this sender is a notification sender, or null.
+export function notificationSender(address: string | null | undefined): string | null {
+  const a = String(address ?? "").trim().toLowerCase();
+  const at = a.lastIndexOf("@");
+  if (at < 1) return null;
+  const domain = a.slice(at + 1);
+  const hit = NOTIFICATION_DOMAINS.find((d) => domain === d || domain.endsWith(`.${d}`));
+  if (hit) return `notifications from ${hit}`;
+  const local = a.slice(0, at).split("+")[0];
+  return NOTIFY_LOCAL.test(local) ? `notification sender ${local}@` : null;
+}
 
 export type HardInput = {
   from_address: string | null;
@@ -90,11 +127,12 @@ export function hardNoise(e: HardInput, opts: { vips?: unknown; ignore?: unknown
   const vips = Array.isArray(opts.vips) ? opts.vips.map((x) => String(x ?? "")) : [];
   if (vipMatch(e.from_address, vips)) return null;
   if (isVinted(e)) return vintedReturnHint(e.subject, e.body) ? null : "Vinted, not a return";
+  const notify = notificationSender(e.from_address);
   const mass = e.bulk_reason || (bulkSender(e.from_address) ? `sender ${bulkSender(e.from_address)}` : null);
-  if (!mass) return null;
+  if (!mass && !notify) return null;
   const hay = `${e.from_name ?? ""}\n${e.from_address ?? ""}\n${e.subject ?? ""}\n${String(e.body ?? "").slice(0, 2000)}`;
   if (MONEY_OR_AUTHORITY.test(hay)) return null;
-  return `mass mail (${mass})`;
+  return notify ?? `mass mail (${mass})`;
 }
 
 // ── Vinted returns ─────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import { suite, eq, ok } from "./t.ts";
 import {
   answeredState, appendRule, applyVintedRule, bulkHeaders, bulkSender, cleanupPlan, deleteJarvisDraft, DEFAULT_MAIL_RULES,
-  hardNoise, isVinted, lastVerbState, normalizeSender, vintedRemind, vintedReturnHint,
+  hardNoise, isVinted, lastVerbState, normalizeSender, notificationSender, vintedRemind, vintedReturnHint,
 } from "../supabase/functions/_shared/mail-rules-core.ts";
 import { triageUser, validateTriage } from "../supabase/functions/_shared/email-triage-core.ts";
 import { localToUtc } from "../supabase/functions/_shared/time.ts";
@@ -27,7 +27,30 @@ test("mass: sender patterns", () => {
 });
 test("hard noise: mass mail is noise, without a Claude call", () => {
   ok(hardNoise({ from_address: "news@shop.se", subject: "Black week!", body: "50% off", bulk_reason: "List-Unsubscribe header" })?.startsWith("mass mail"));
-  ok(hardNoise({ from_address: "noreply@postnord.se", subject: "Ditt paket", body: "Ditt paket är på väg" })?.startsWith("mass mail"));
+  ok(hardNoise({ from_address: "noreply@shop.se", subject: "Nyheter", body: "Veckans erbjudanden" })?.startsWith("mass mail"));
+});
+
+// ── Rule 4: notification mail ───────────────────────────────────────────
+test("notifications: sender domains (and subdomains) and notification addresses", () => {
+  eq(notificationSender("noreply@github.com"), "notifications from github.com");
+  eq(notificationSender("info@mailer.supabase.io"), "notifications from supabase.io");
+  eq(notificationSender("account-security-noreply@accountprotection.microsoft.com"), "notifications from microsoft.com");
+  eq(notificationSender("no-reply@vercel.com"), "notifications from vercel.com");
+  eq(notificationSender("alerts@minbank.se"), "notification sender alerts@");
+  eq(notificationSender("updates+x@shop.se"), "notification sender updates@");
+  for (const a of ["anna@gmail.com", "kund@outlook.com", "x@icloud.com", "vic@hotmail.com", "richie@thriftin.se"]) eq(notificationSender(a), null, `person: ${a}`);
+});
+test("notifications are noise without a Claude call...", () => {
+  eq(hardNoise({ from_address: "notifications@github.com", subject: "[pukinghydra/jarvis] Run failed", body: "Deploy edge functions failed" }), "notifications from github.com");
+  eq(hardNoise({ from_address: "noreply@swedbank.se", subject: "Ny inloggning", body: "Någon loggade in på din internetbank" }), "notifications from swedbank.se");
+  eq(hardNoise({ from_address: "noreply@postnord.se", subject: "Ditt paket", body: "Ditt paket är på väg" }), "notifications from postnord.se");
+  eq(hardNoise({ from_address: "no-reply@accounts.google.com", subject: "Security alert", body: "New sign-in on Mac" }), "notifications from google.com");
+});
+test("...except a payment or a real deadline only VIC can act on (Claude decides), and Vinted returns", () => {
+  eq(hardNoise({ from_address: "noreply@swedbank.se", subject: "Din faktura förfaller", body: "Betala senast 15 nov" }), null);
+  eq(hardNoise({ from_address: "billing@vercel.com", subject: "Invoice", body: "Payment due on Nov 10" }), null);
+  eq(hardNoise({ from_address: "no-reply@vinted.se", subject: "Returförfrågan", body: "Skicka tillbaka" }), null);
+  eq(hardNoise({ from_address: "notifications@github.com", subject: "x", body: "y" }, { vips: ["@github.com"] }), null, "a VIP sender still goes to Claude");
 });
 test("hard noise: a real person is never hard noise", () => {
   eq(hardNoise({ from_address: "anna@gmail.com", subject: "Fika?", body: "Ses du imorgon?" }), null);
@@ -137,7 +160,7 @@ test("rules: ignore-sender normalising", () => {
 test("rules: appending numbers the new rule after the defaults", () => {
   const r = appendRule(undefined, "  ignorera allt från ICA  ");
   ok(r.startsWith(DEFAULT_MAIL_RULES));
-  ok(r.endsWith("\n4. ignorera allt från ICA"), r.slice(-60));
+  ok(r.endsWith("\n5. ignorera allt från ICA"), r.slice(-60));
   eq(appendRule("1. a", ""), "1. a");
 });
 test("rules go to Claude as VIC's own instructions, outside the email data", () => {

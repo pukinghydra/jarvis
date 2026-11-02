@@ -90,7 +90,7 @@ For every email return exactly one entry with its id:
   - urgent: needs VIC today or money/legal trouble soon (overdue bill, Kronofogden/inkasso, Skatteverket deadline within ~3 days, a customer problem with an order, a security alert about his own accounts that looks genuine, someone waiting on him for something today).
   - important: needs VIC this week (bills with a due date, bookings to confirm, Vinted/Shopify/PostNord/DHL issues, returns, a real person asking him something, business admin, Fortnox).
   - normal: worth knowing, nothing to do (receipts, order confirmations with no problem, shipping notices that need no action).
-  - noise: newsletters, marketing, promotions, social notifications, automated digests, anything from no-reply that needs nothing.
+  - noise: newsletters, marketing, promotions, social notifications, automated digests, anything from no-reply that needs nothing. All notification mail is noise (GitHub, Supabase, Vercel, Anthropic, Microsoft/Azure/Google/Apple account mail, app stores, banks' "new login / statement ready", shipping-status pings, social media), unless it asks VIC to pay or has a real deadline only he can act on.
   Suspected phishing is noise, and say "looks like phishing" in why.
 - summary: one plain English line, max 120 characters, who + what + what's needed. No links.
 - why: max 80 characters, why this importance.
