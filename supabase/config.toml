@@ -24,3 +24,6 @@ verify_jwt = false   # Claude connector, secret URL path (app_secrets MCP_KEY)
 
 [functions.chat]
 verify_jwt = false   # the app's voice chat; owner checked in code
+
+[functions.transcribe]
+verify_jwt = false   # the Talk screen's recordings; owner checked in code

@@ -128,3 +128,12 @@ h3.amber { color: var(--amber); }
 .status-list { margin: 0; padding-left: 18px; color: var(--muted); }
 .login { display: grid; gap: 10px; max-width: 360px; padding-top: 18vh; }
 .login h1 { text-align: center; }
+/* Talk: recording + review */
+.rec-row { display: flex; gap: 10px; align-items: center; justify-content: center; margin-top: 12px; }
+.meter { width: 160px; height: 10px; border-radius: 6px; background: var(--card); border: 1px solid var(--line); overflow: hidden; }
+.meter-fill { height: 100%; background: var(--green); transition: width .08s linear; }
+.review { display: flex; flex-direction: column; gap: 10px; }
+.review-text { min-height: 110px; font-size: 17px; }
+.review-buttons { display: flex; gap: 10px; }
+.review-buttons .big { flex: 1; min-height: 56px; font-size: 18px; }
+.retry { margin-left: 8px; }

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, supabase, must } from "../lib/supabase.js";
 import { enablePush, pushState, isStandalone } from "../lib/push.js";
-import { prefs } from "../lib/prefs.js";
 
 export default function Settings({ session }) {
   const [status, setStatus] = useState(null);
@@ -10,7 +9,6 @@ export default function Settings({ session }) {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState("");
-  const [readAloud, setReadAloud] = useState(prefs.readAloud());
   const [travel, setTravel] = useState(30);
   const [vips, setVips] = useState("");
   const [copied, setCopied] = useState(false);
@@ -152,8 +150,8 @@ export default function Settings({ session }) {
 
       <section>
         <h3>Voice</h3>
-        <label className="toggle"><input type="checkbox" checked={readAloud} onChange={(e) => { setReadAloud(e.target.checked); prefs.setReadAloud(e.target.checked); }} /> Read answers aloud</label>
-        <p className="muted small">Language is set on the Talk screen (Svenska / English).</p>
+        <p className="muted small">Speech to text: {status ? (status.speech_to_text ?? "off — add OPENAI_API_KEY (or ELEVENLABS_API_KEY) in the function secrets; until then the mic opens the keyboard, use its 🎤") : "–"}</p>
+        <p className="muted small">Tap the mic to record, tap again to stop, check the text, then Skicka. Answers are text only.</p>
       </section>
 
       <section>

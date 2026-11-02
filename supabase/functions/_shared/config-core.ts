@@ -15,6 +15,9 @@ export const CONFIG_KEYS = [
   "JARVIS_TRIAGE_MODEL",
   "JARVIS_CHAT_EFFORT",
   "ANTHROPIC_API_KEY",
+  "OPENAI_API_KEY",
+  "ELEVENLABS_API_KEY",
+  "TRANSCRIBE_MODEL",
 ] as const;
 export type ConfigKey = typeof CONFIG_KEYS[number];
 

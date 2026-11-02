@@ -69,6 +69,8 @@ no calendar; the calendars are iCloud).
 | `THRIFTIN_FEED_URL` | `https://mpkazwsxjorocqajpkao.supabase.co/functions/v1/jarvis-feed` |
 | `THRIFTIN_FEED_TOKEN` | random token (`npm run token`), same as THRIFTIN's `JARVIS_FEED_TOKEN` |
 | `ANTHROPIC_API_KEY` | optional: auto-sort notes in the app |
+| `OPENAI_API_KEY` | optional: speech to text for the Talk mic (`gpt-4o-transcribe`; `TRANSCRIBE_MODEL` overrides) |
+| `ELEVENLABS_API_KEY` | optional: speech to text instead of OpenAI (`scribe_v2`), used when no OpenAI key |
 | `JARVIS_MODEL` | optional, default `claude-opus-5-5` |
 
 ## Deploy order

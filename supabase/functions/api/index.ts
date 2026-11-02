@@ -27,6 +27,7 @@ import { thriftinFeed } from "../_shared/thriftin.ts";
 import { buyList } from "../_shared/buylist.ts";
 import { hasClaude } from "../_shared/claude.ts";
 import { appSecret, vapidKeys } from "../_shared/secrets.ts";
+import { chooseProvider } from "../_shared/transcribe-core.ts";
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 const waitUntil = (p: Promise<unknown>) => (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil ? EdgeRuntime.waitUntil(p) : undefined);
@@ -45,9 +46,10 @@ Deno.serve(async (req) => {
       case "stats":
         return json(await stats(now));
       case "status": {
-        const [msId, msSecret, ics, feedUrl, feedToken, appUrl] = await Promise.all(
-          (["MS_CLIENT_ID", "MS_CLIENT_SECRET", "ICS_URL", "THRIFTIN_FEED_URL", "THRIFTIN_FEED_TOKEN", "APP_URL"] as const).map((k) => config(k)),
+        const [msId, msSecret, ics, feedUrl, feedToken, appUrl, openai, eleven, sttModel] = await Promise.all(
+          (["MS_CLIENT_ID", "MS_CLIENT_SECRET", "ICS_URL", "THRIFTIN_FEED_URL", "THRIFTIN_FEED_TOKEN", "APP_URL", "OPENAI_API_KEY", "ELEVENLABS_API_KEY", "TRANSCRIBE_MODEL"] as const).map((k) => config(k)),
         );
+        const stt = chooseProvider({ openai, elevenlabs: eleven, model: sttModel });
         return json({
           claude_api: await hasClaude(),
           hotmail: await msStatus(),
@@ -56,6 +58,7 @@ Deno.serve(async (req) => {
           calendars: icsUrls(ics).length,
           thriftin: !!(feedUrl && feedToken),
           app_url: appUrl || null,
+          speech_to_text: stt ? `${stt.name} (${stt.model})` : null,
         });
       }
       case "vapid":

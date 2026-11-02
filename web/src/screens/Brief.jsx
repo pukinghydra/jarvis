@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { api, supabase, must } from "../lib/supabase.js";
-import { speak, stopSpeaking } from "../lib/speech.js";
 import Markdown from "../components/Markdown.jsx";
 
 export default function Brief() {
@@ -20,13 +19,10 @@ export default function Brief() {
     try { await api("brief_now"); await load(); setIdx(0); } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
   const b = briefs[idx];
-  const readAloud = () => speak((b?.markdown ?? "").replace(/^#+ /gm, "").replace(/^- /gm, "").replace(/\[[0-9a-f]{8}\]/g, ""), "en-GB");
 
   return (
     <div className="screen">
       <div className="row">
-        <button className="primary" onClick={readAloud} disabled={!b}>🔊 Read aloud</button>
-        <button className="ghost" onClick={stopSpeaking}>Stop</button>
         <button className="ghost" onClick={rebuild} disabled={busy}>{busy ? "Building…" : "↻ Now"}</button>
       </div>
       {err && <div className="err">{err}</div>}

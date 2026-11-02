@@ -1,87 +1,132 @@
 import { useEffect, useRef, useState } from "react";
-import { chat } from "../lib/supabase.js";
-import { speechSupported, startListening, speak, stopSpeaking, unlockSpeech } from "../lib/speech.js";
+import { chat, transcribe } from "../lib/supabase.js";
+import { canRecord, clock, startRecording, MAX_SECONDS } from "../lib/recorder.js";
 import { prefs } from "../lib/prefs.js";
 
-// The default screen. Tap the mic and talk (Swedish or English): Jarvis
-// answers in text and out loud, and acts (adds items, checks mail, drafts
-// replies, searches the web...). Typing works too. Without a Claude API key
-// the words are saved as a note instead, like before.
+// The default screen. Tap the mic to record, tap again to stop. The
+// recording is turned into text on the server; VIC checks/edits it, then
+// "Skicka" sends it to Jarvis (or "Börja om" throws it away). Answers are
+// text only. Without a speech-to-text key the mic opens the keyboard so the
+// keyboard's own 🎤 dictation can be used. Typing always works.
 export default function Talk({ onSaved }) {
   const [lang, setLang] = useState(prefs.lang());
-  const [readAloud, setReadAloud] = useState(prefs.readAloud());
   const [messages, setMessages] = useState([]);
   const [claude, setClaude] = useState(true);
-  const [listening, setListening] = useState(false);
-  const [live, setLive] = useState("");
+  const [stt, setStt] = useState(undefined);         // undefined = checking, null = none
+  const [mode, setMode] = useState("idle");          // idle | recording | transcribing | review
+  const [secs, setSecs] = useState(0);
+  const [level, setLevel] = useState(0);
+  const [draft, setDraft] = useState("");            // the transcript being checked
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
-  const [speaking, setSpeaking] = useState(false);
   const [err, setErr] = useState("");
-  const stopRef = useRef(null);
-  const liveRef = useRef("");
-  const sentRef = useRef(false);
+  const [hint, setHint] = useState("");
+  const recRef = useRef(null);
+  const blobRef = useRef(null);
+  const typeRef = useRef(null);
   const endRef = useRef(null);
-  const canListen = speechSupported();
-  const svUi = lang.startsWith("sv");
-  const t = (s, e) => (svUi ? s : e);
+  const sv = lang.startsWith("sv");
+  const t = (s, e) => (sv ? s : e);
+  const recordable = canRecord() && !!stt;
 
   useEffect(() => {
     chat("history").then((h) => { setClaude(h.claude !== false); setMessages(h.messages ?? []); }).catch(() => { /* empty conversation is fine */ });
-    return () => { stopRef.current?.(); stopSpeaking(); };
+    transcribe({ check: true }).then((r) => setStt(r.provider ?? null)).catch(() => setStt(null));
+    return () => recRef.current?.cancel();
   }, []);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [messages, live, busy]);
-
-  const shh = () => { stopSpeaking(); setSpeaking(false); };
-  const say = (text, l) => {
-    if (!readAloud || !text) return;
-    setSpeaking(true);
-    speak(text, l, { onEnd: () => setSpeaking(false) });
-  };
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [messages, busy, mode]);
 
   const send = async (text, source) => {
     const clean = (text ?? "").trim();
-    if (!clean || sentRef.current) return;
-    sentRef.current = true;
-    setBusy(true); setErr(""); setLive(""); setTyped("");
+    if (!clean || busy) return;
+    setBusy(true); setErr("");
     setMessages((m) => [...m, { role: "user", text: clean, actions: [] }]);
     try {
       const r = await chat("say", { text: clean, lang, source });
       setMessages((m) => [...m, { role: "assistant", text: r.reply_text, actions: r.actions ?? [] }]);
       if (r.mode === "note") setClaude(false);
-      say(r.reply_text, r.lang || lang);
+      if (source === "voice") { setDraft(""); setMode("idle"); blobRef.current = null; } else setTyped("");
       onSaved?.();
     } catch (e) {
       setMessages((m) => [...m, { role: "assistant", text: e.message, actions: [], error: true }]);
-      setTyped(clean);
     } finally {
       setBusy(false);
     }
   };
 
-  const toggleMic = () => {
-    if (speaking) shh();
-    if (listening) { stopRef.current?.(); return; }
-    unlockSpeech(); // inside the tap: lets iOS read the answer out later
-    setErr(""); setLive(""); liveRef.current = ""; sentRef.current = false;
+  const runTranscribe = async (blob) => {
+    setMode("transcribing"); setErr("");
     try {
-      stopRef.current = startListening({
-        lang,
-        onText: (txt) => { liveRef.current = txt; setLive(txt); },
-        onEnd: (final) => { setListening(false); send(final || liveRef.current, "voice"); },
-        onError: (m) => { setErr(m); setListening(false); },
-      });
-      setListening(true);
-    } catch (e) { setErr(`Mic didn't start: ${e.message}`); }
+      const r = await transcribe(blob);
+      const text = (r.text ?? "").trim();
+      if (!text) { setErr(t("Hörde inget. Försök igen, närmare mikrofonen.", "Heard nothing. Try again, closer to the mic.")); setMode("idle"); return; }
+      blobRef.current = null;
+      setDraft(text); setMode("review");
+    } catch (e) {
+      setErr(e.message); setMode("idle");
+    }
   };
 
-  const sendTyped = () => { unlockSpeech(); sentRef.current = false; send(typed, "app"); };
+  const startRec = async () => {
+    setErr(""); setHint(""); setSecs(0); setLevel(0); blobRef.current = null;
+    try {
+      recRef.current = await startRecording({
+        onTick: setSecs,
+        onLevel: setLevel,
+        onLimit: () => setHint(t("Max 10 minuter: stoppat.", "10 minute limit: stopped.")),
+      });
+      setMode("recording");
+    } catch (e) {
+      const blocked = e?.name === "NotAllowedError" || e?.name === "SecurityError";
+      setErr(blocked
+        ? t("Mikrofonen är blockerad: tillåt den i Inställningar > Safari > Mikrofon (eller för appen).", "Microphone blocked: allow it in Settings > Safari > Microphone.")
+        : t(`Mikrofonen startade inte: ${e.message}`, `Mic didn't start: ${e.message}`));
+      recRef.current = null;
+    }
+  };
+
+  const stopRec = async () => {
+    const rec = recRef.current;
+    recRef.current = null;
+    if (!rec) return;
+    setMode("transcribing");
+    const blob = await rec.stop();
+    blobRef.current = blob;
+    runTranscribe(blob);
+  };
+
+  const cancelRec = () => { recRef.current?.cancel(); recRef.current = null; blobRef.current = null; setMode("idle"); setSecs(0); setLevel(0); };
+  const restart = () => { setDraft(""); setErr(""); blobRef.current = null; setMode("idle"); };
+
+  const micTap = () => {
+    if (busy) return;
+    if (mode === "recording") { stopRec(); return; }
+    if (mode !== "idle") return;
+    if (!recordable) {
+      typeRef.current?.focus();
+      setHint(t("Tryck på tangentbordets 🎤 för att diktera.", "Tap the keyboard's 🎤 to dictate."));
+      return;
+    }
+    startRec();
+  };
+
+  // Stop when the recording hits the cap.
+  useEffect(() => { if (mode === "recording" && secs >= MAX_SECONDS) stopRec(); }, [secs, mode]);
+
   const newTopic = async () => {
-    shh();
     try { await chat("new_topic"); setMessages([]); } catch (e) { setErr(e.message); }
   };
   const switchLang = (l) => { setLang(l); prefs.setLang(l); };
-  const toggleAloud = () => { const v = !readAloud; setReadAloud(v); prefs.setReadAloud(v); if (!v) shh(); };
+
+  const micLabel = busy ? "…" : mode === "recording" ? "■" : mode === "transcribing" ? "…" : "🎙";
+  const status =
+    busy ? t("Jarvis tänker…", "Jarvis is thinking…")
+    : mode === "recording" ? `${clock(secs)} · ${t("tryck för att stoppa", "tap to stop")}`
+    : mode === "transcribing" ? t("Skriver ut…", "Transcribing…")
+    : mode === "review" ? t("Kolla texten, ändra om du vill", "Check the text, edit if needed")
+    : stt === undefined ? ""
+    : recordable ? t("Tryck och prata, tryck igen när du är klar", "Tap and talk, tap again when done")
+    : t("Tryck: tangentbordet öppnas, använd dess 🎤", "Tap: the keyboard opens, use its 🎤");
 
   return (
     <div className="screen talk">
@@ -91,16 +136,15 @@ export default function Talk({ onSaved }) {
             <button key={l} className={lang === l ? "on" : ""} onClick={() => switchLang(l)}>{l === "sv-SE" ? "Svenska" : "English"}</button>
           ))}
         </div>
-        <button className="ghost small" onClick={toggleAloud} aria-label="Read answers aloud">{readAloud ? "🔊" : "🔇"}</button>
         {messages.length > 0 && <button className="ghost small" onClick={newTopic}>{t("Nytt ämne", "New topic")}</button>}
       </div>
 
       <div className="chat-log">
-        {messages.length === 0 && !live && (
+        {messages.length === 0 && mode === "idle" && (
           <p className="muted center">
             {claude
               ? t("Tryck på mikrofonen och prata. Jarvis svarar och gör det åt dig: lägger till, kollar mejlen, skriver utkast, söker på nätet.", "Tap the mic and talk. Jarvis answers and does it for you: adds things, checks mail, drafts replies, searches the web.")
-              : t("Tryck och prata: det sparas som en anteckning (ingen Claude API-nyckel).", "Tap and talk: it's saved as a note (no Claude API key).")}
+              : t("Det du säger sparas som en anteckning (ingen Claude API-nyckel).", "What you say is saved as a note (no Claude API key).")}
           </p>
         )}
         {messages.map((m, i) => (
@@ -113,30 +157,49 @@ export default function Talk({ onSaved }) {
             )}
           </div>
         ))}
-        {live && <div className="bubble user live">{live}</div>}
         {busy && <div className="bubble assistant thinking">{t("Tänker…", "Thinking…")}</div>}
         <div ref={endRef} />
       </div>
 
-      {err && <div className="err">{err}</div>}
+      {err && (
+        <div className="err">
+          {err}
+          {blobRef.current && mode === "idle" && <button className="ghost small retry" onClick={() => runTranscribe(blobRef.current)}>{t("Försök igen", "Try again")}</button>}
+        </div>
+      )}
 
       <div className="talk-bottom">
-        {canListen ? (
-          <button className={`mic${listening ? " live" : ""}${messages.length ? " small-mic" : ""}`} onClick={toggleMic} disabled={busy} aria-label={listening ? "Stop" : "Talk"}>
-            {busy ? "…" : listening ? "■" : "🎙"}
-          </button>
+        {mode === "review" ? (
+          <div className="review">
+            <textarea className="input review-text" rows={4} value={draft} onChange={(e) => setDraft(e.target.value)} />
+            <div className="review-buttons">
+              <button className="ghost big" onClick={restart} disabled={busy}>{t("Börja om", "Start over")}</button>
+              <button className="primary big" onClick={() => send(draft, "voice")} disabled={busy || !draft.trim()}>{busy ? "…" : t("Skicka", "Send")}</button>
+            </div>
+          </div>
         ) : (
-          <p className="muted small center">{t("Röst funkar inte här. Skriv nedan (tangentbordets mikrofon funkar också).", "Voice isn't available here. Type below (the keyboard's mic works too).")}</p>
+          <>
+            <button className={`mic${mode === "recording" ? " live" : ""}${messages.length ? " small-mic" : ""}`} onClick={micTap}
+              disabled={busy || mode === "transcribing"} aria-label={mode === "recording" ? "Stop" : "Talk"}>
+              {micLabel}
+            </button>
+            {mode === "recording" && (
+              <div className="rec-row">
+                <div className="meter" aria-hidden="true"><div className="meter-fill" style={{ width: `${Math.round(level * 100)}%` }} /></div>
+                <button className="ghost small" onClick={cancelRec}>{t("Avbryt", "Cancel")}</button>
+              </div>
+            )}
+            <p className="hint center">{status}</p>
+            {hint && <p className="muted small center">{hint}</p>}
+          </>
         )}
-        <p className="hint center">
-          {busy ? t("Jarvis tänker…", "Jarvis is thinking…") : listening ? t("Lyssnar… tryck för att stoppa", "Listening… tap to stop") : speaking ? t("Pratar…", "Talking…") : canListen ? t("Tryck och prata", "Tap and talk") : ""}
-          {speaking && <button className="ghost small stop-talk" onClick={shh}>{t("Tyst", "Stop talking")}</button>}
-        </p>
-        <div className="type-box">
-          <textarea className="input" rows={1} placeholder={t("…eller skriv", "…or type")} value={typed} onChange={(e) => setTyped(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (typed.trim() && !busy) sendTyped(); } }} />
-          <button className="primary" disabled={busy || !typed.trim()} onClick={sendTyped}>{t("Skicka", "Send")}</button>
-        </div>
+        {mode !== "review" && (
+          <div className="type-box">
+            <textarea ref={typeRef} className="input" rows={1} placeholder={t("…eller skriv", "…or type")} value={typed} onChange={(e) => setTyped(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (typed.trim() && !busy) send(typed, "app"); } }} />
+            <button className="primary" disabled={busy || !typed.trim()} onClick={() => send(typed, "app")}>{t("Skicka", "Send")}</button>
+          </div>
+        )}
       </div>
     </div>
   );

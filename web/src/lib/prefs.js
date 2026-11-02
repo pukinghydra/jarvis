@@ -5,7 +5,4 @@ const write = (k, v) => { try { localStorage.setItem(`jarvis.${k}`, JSON.stringi
 export const prefs = {
   lang: () => read("lang", "sv-SE"),
   setLang: (v) => write("lang", v),
-  // Read Jarvis's answers aloud (Talk screen). On unless turned off.
-  readAloud: () => read("readAloud", true),
-  setReadAloud: (v) => write("readAloud", v),
 };
