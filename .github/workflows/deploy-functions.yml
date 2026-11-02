@@ -47,7 +47,7 @@ jobs:
       - name: Deploy all functions
         run: |
           set -o pipefail
-          if ! supabase functions deploy --project-ref "$PROJECT_REF" 2>&1 | tee deploy.log; then
+          if ! supabase functions deploy --project-ref "$PROJECT_REF" --yes 2>&1 | tee deploy.log; then
             tail -n 10 deploy.log | while IFS= read -r line; do echo "::error::${line}"; done
             exit 1
           fi
