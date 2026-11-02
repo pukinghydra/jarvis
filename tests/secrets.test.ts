@@ -36,3 +36,17 @@ test("config: covers every setting VIC may need to set", () => {
   }
   ok(!(CONFIG_KEYS as readonly string[]).includes("CRON_SECRET"), "generated secrets are not config keys");
 });
+
+// ── Microsoft scopes: mail only, no calendar, never send ──
+import { SCOPES } from "../supabase/functions/_shared/ms-scopes.ts";
+import { readFileSync } from "node:fs";
+
+test("ms scopes: offline_access, User.Read, Mail.ReadWrite only", () => {
+  eq(SCOPES.split(" ").sort().join(" "), "Mail.ReadWrite User.Read offline_access");
+  ok(!/Calendars\./.test(SCOPES), "no calendar scope");
+  ok(!/Mail\.Send/.test(SCOPES), "never Mail.Send");
+});
+test("calendar sync reads iCloud only (no Graph calendarView)", () => {
+  const src = readFileSync(new URL("../../supabase/functions/_shared/calendar.ts", import.meta.url), "utf8");
+  ok(!/calendarView|graph\.ts/.test(src), "calendar.ts must not call Graph");
+});

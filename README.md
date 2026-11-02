@@ -51,7 +51,14 @@ Made inside the Jarvis database by the migration or on first use, never
 typed anywhere: `CRON_SECRET`, `STATE_SECRET`, `MCP_KEY`, `PROJECT_URL`,
 `VAPID_KEYS` (table `app_secrets`, service role only).
 
-Set in Supabase → Edge Functions → Secrets (Jarvis project):
+Set in Supabase → Edge Functions → Secrets (Jarvis project), **or** as a
+row in `app_secrets` with the same name as key. The functions read the
+environment first and fall back to the table (refreshed every 60 s), so the
+table works when the dashboard's secrets box can't be used:
+`insert into app_secrets (key, value) values ('ICS_URL', '…') on conflict (key) do update set value = excluded.value;`
+
+Microsoft scopes: `offline_access User.Read Mail.ReadWrite` only (no send,
+no calendar; the calendars are iCloud).
 
 | Secret | What |
 |---|---|

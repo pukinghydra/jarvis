@@ -3,15 +3,14 @@
 //  - Main source: iPhone iCloud calendars ("Hem", "Arbete") through their
 //    public share links. Secret ICS_URL = comma-separated list of links
 //    (webcal:// or https://).
-//  - Optional: the Outlook calendar through Graph when Hotmail is connected
-//    (harmless if it's empty).
+//  - No Outlook/Graph calendar: VIC doesn't use it, and Jarvis doesn't ask
+//    Microsoft for calendar access.
 // Window: yesterday to +8 days. Called by the tick every 10 minutes and by
 // the app's refresh button.
 
 import { config } from "./config.ts";
 import { sb } from "./db.ts";
 import { icsName, parseIcs } from "./ics.ts";
-import { calendarView, accessToken } from "./graph.ts";
 import { addDays, localDateStr, startOfLocalDay } from "./time.ts";
 
 export function icsUrls(raw: string): string[] {
@@ -48,22 +47,6 @@ export async function syncCalendar(now: Date) {
       out[name] = events.length;
     } catch (e) {
       out[`${fallbackName} error`] = String((e as Error).message ?? e);
-    }
-  }
-
-  if (await accessToken().catch(() => null)) {
-    try {
-      const events = await calendarView(from, to);
-      for (const e of events) {
-        rows.push({
-          id: `outlook:Outlook:${e.id}:${e.start}`, source: "outlook", calendar: "Outlook", title: e.title,
-          start_at: e.start, end_at: e.end, all_day: e.all_day, location: e.location, synced_at: syncedAt,
-        });
-      }
-      answered.push(["outlook", "Outlook"]);
-      out.Outlook = events.length;
-    } catch (e) {
-      out["Outlook error"] = String((e as Error).message ?? e);
     }
   }
 

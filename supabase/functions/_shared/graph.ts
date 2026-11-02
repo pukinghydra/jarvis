@@ -1,9 +1,9 @@
 // deno-lint-ignore-file no-explicit-any
 // Microsoft Graph for VIC's personal Hotmail (Outlook.com) account.
 //
-// Scopes: read mail and write drafts (Mail.ReadWrite), read the calendar,
-// keep access (offline_access). No Mail.Send: Jarvis can't send email even
-// if it tried.
+// Scopes (ms-scopes.ts): read mail and write drafts (Mail.ReadWrite), keep
+// access (offline_access). No Mail.Send: Jarvis can't send email even if it
+// tried. No calendar: VIC's calendars are iCloud (calendar.ts).
 
 import { SUPABASE_URL } from "./env.ts";
 import { config } from "./config.ts";
@@ -11,7 +11,8 @@ import { sb } from "./db.ts";
 
 const AUTH = "https://login.microsoftonline.com/consumers/oauth2/v2.0";
 const GRAPH = "https://graph.microsoft.com/v1.0";
-export const SCOPES = "offline_access User.Read Mail.ReadWrite Calendars.Read";
+import { SCOPES } from "./ms-scopes.ts";
+export { SCOPES };
 
 export const redirectUri = () => `${SUPABASE_URL}/functions/v1/ms-auth`;
 
@@ -137,26 +138,4 @@ export async function createReplyDraft(messageId: string, text: string): Promise
     body: JSON.stringify({ comment: text }),
   });
   return { id: d.id, webLink: d.webLink ?? null };
-}
-
-export type GraphEvent = { id: string; title: string; start: string; end: string | null; all_day: boolean; location: string | null };
-
-// Outlook calendar events in [from, to). Times come back in UTC.
-export async function calendarView(from: Date, to: Date): Promise<GraphEvent[]> {
-  const q = new URLSearchParams({
-    startDateTime: from.toISOString(),
-    endDateTime: to.toISOString(),
-    $select: "id,subject,start,end,isAllDay,location,isCancelled",
-    $top: "200",
-    $orderby: "start/dateTime",
-  });
-  const r = await graph(`/me/calendarView?${q}`, { headers: { Prefer: 'outlook.timezone="UTC"' } });
-  return (r?.value ?? []).filter((e: any) => !e.isCancelled).map((e: any) => ({
-    id: e.id,
-    title: e.subject || "(no title)",
-    start: new Date(`${String(e.start?.dateTime).replace(/\.\d+$/, "")}Z`).toISOString(),
-    end: e.end?.dateTime ? new Date(`${String(e.end.dateTime).replace(/\.\d+$/, "")}Z`).toISOString() : null,
-    all_day: !!e.isAllDay,
-    location: e.location?.displayName || null,
-  }));
 }
