@@ -23,7 +23,7 @@ import { syncCalendar } from "../_shared/calendar.ts";
 import { scanEmails } from "../_shared/email.ts";
 import { triageNewEmails } from "../_shared/email-triage.ts";
 import { mailPlan } from "../_shared/email-triage-core.ts";
-import { rebuildStyle } from "../_shared/style.ts";
+import { getStyle, rebuildStyle } from "../_shared/style.ts";
 import { hasClaude } from "../_shared/claude.ts";
 import { isMonday } from "../_shared/brief-core.ts";
 import { runBrief } from "../_shared/brief.ts";
@@ -85,6 +85,13 @@ Deno.serve(async (req) => {
   }
   if (triageOn && isMonday(today) && inLocalWindow(now, "09:45", 120) && await claimOnce(`style:${today}`).catch(() => false)) {
     jobs.push(step(report, "style", () => rebuildStyle(now)));
+  } else if (triageOn) {
+    // No style learned yet (new install): learn it now instead of waiting for
+    // Monday. At most one try per hour, so a failure doesn't loop.
+    const style = await getStyle().catch(() => null);
+    if ((!style || Object.keys(style).length === 0) && await claimOnce(`style:first:${now.toISOString().slice(0, 13)}`).catch(() => false)) {
+      jobs.push(step(report, "style-first", () => rebuildStyle(now)));
+    }
   }
   if (inLocalWindow(now, "09:30", 150) && await claimOnce(`brief:${today}`).catch(() => false)) {
     jobs.push(step(report, "brief", () => briefWithRetry(now, today)));
