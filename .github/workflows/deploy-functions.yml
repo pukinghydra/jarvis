@@ -42,8 +42,15 @@ jobs:
         with:
           version: latest
 
+      # On failure, the last lines also go out as annotations, so the error
+      # can be read from the check run without downloading logs.
       - name: Deploy all functions
-        run: supabase functions deploy --project-ref "$PROJECT_REF"
+        run: |
+          set -o pipefail
+          if ! supabase functions deploy --project-ref "$PROJECT_REF" 2>&1 | tee deploy.log; then
+            tail -n 10 deploy.log | while IFS= read -r line; do echo "::error::${line}"; done
+            exit 1
+          fi
 
       - name: List functions
         run: supabase functions list --project-ref "$PROJECT_REF"
