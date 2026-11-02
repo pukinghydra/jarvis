@@ -5,7 +5,8 @@
 // keep access (offline_access). No Mail.Send: Jarvis can't send email even
 // if it tried.
 
-import { env, SUPABASE_URL } from "./env.ts";
+import { SUPABASE_URL } from "./env.ts";
+import { config } from "./config.ts";
 import { sb } from "./db.ts";
 
 const AUTH = "https://login.microsoftonline.com/consumers/oauth2/v2.0";
@@ -14,8 +15,8 @@ export const SCOPES = "offline_access User.Read Mail.ReadWrite Calendars.Read";
 
 export const redirectUri = () => `${SUPABASE_URL}/functions/v1/ms-auth`;
 
-export function authorizeUrl(state: string): string {
-  const clientId = env("MS_CLIENT_ID");
+export async function authorizeUrl(state: string): Promise<string> {
+  const clientId = await config("MS_CLIENT_ID");
   if (!clientId) throw new Error("MS_CLIENT_ID is not set");
   const q = new URLSearchParams({
     client_id: clientId,
@@ -30,10 +31,12 @@ export function authorizeUrl(state: string): string {
 }
 
 async function tokenRequest(form: Record<string, string>) {
+  const [clientId, clientSecret] = await Promise.all([config("MS_CLIENT_ID"), config("MS_CLIENT_SECRET")]);
+  if (!clientId || !clientSecret) throw new Error("MS_CLIENT_ID / MS_CLIENT_SECRET are not set yet");
   const res = await fetch(`${AUTH}/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: env("MS_CLIENT_ID"), client_secret: env("MS_CLIENT_SECRET"), scope: SCOPES, ...form }),
+    body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, scope: SCOPES, ...form }),
     signal: AbortSignal.timeout(20_000),
   });
   const body = await res.json().catch(() => ({}));

@@ -4,7 +4,7 @@
 // Without THRIFTIN_FEED_URL / THRIFTIN_FEED_TOKEN this returns null and
 // the brief leaves the shop section out.
 
-import { env } from "./env.ts";
+import { config } from "./config.ts";
 import type { CategoryStat } from "./buylist.ts";
 
 export type ThriftinFeed = {
@@ -15,7 +15,7 @@ export type ThriftinFeed = {
 };
 
 export async function thriftinFeed(): Promise<ThriftinFeed | null> {
-  const url = env("THRIFTIN_FEED_URL"), token = env("THRIFTIN_FEED_TOKEN");
+  const [url, token] = await Promise.all([config("THRIFTIN_FEED_URL"), config("THRIFTIN_FEED_TOKEN")]);
   if (!url || !token) return null;
   try {
     const res = await fetch(url, { method: "POST", headers: { "x-jarvis-token": token, "Content-Type": "application/json" }, body: "{}", signal: AbortSignal.timeout(20_000) });

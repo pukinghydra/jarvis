@@ -12,3 +12,27 @@ test("VAPID keys from WebCrypto are accepted by web-push", async () => {
   const h = webpush.getVapidHeaders("https://web.push.apple.com", "https://example.com", k.public, k.private, "aes128gcm");
   ok(String(h.Authorization).startsWith("vapid t="), "vapid header");
 });
+
+// ── config(): env first, else app_secrets ──
+import { CONFIG_KEYS, resolveConfig } from "../supabase/functions/_shared/config-core.ts";
+
+test("config: env value wins over the stored one", () => eq(resolveConfig("MS_CLIENT_ID", " env-id ", { MS_CLIENT_ID: "db-id" }), "env-id"));
+test("config: blank env falls back to app_secrets", () => {
+  eq(resolveConfig("MS_CLIENT_ID", "", { MS_CLIENT_ID: " db-id " }), "db-id");
+  eq(resolveConfig("ICS_URL", "   ", { ICS_URL: "webcal://a,webcal://b" }), "webcal://a,webcal://b");
+  eq(resolveConfig("JARVIS_MODEL", undefined, { JARVIS_MODEL: "claude-sonnet-5-5" }), "claude-sonnet-5-5");
+});
+test("config: neither set gives empty string", () => {
+  eq(resolveConfig("THRIFTIN_FEED_TOKEN", undefined, {}), "");
+  eq(resolveConfig("THRIFTIN_FEED_TOKEN", "", { THRIFTIN_FEED_TOKEN: null }), "");
+});
+test("config: APP_URL loses trailing slashes from either source", () => {
+  eq(resolveConfig("APP_URL", "https://jarvis.example.app//", {}), "https://jarvis.example.app");
+  eq(resolveConfig("APP_URL", "", { APP_URL: "https://jarvis.example.app/" }), "https://jarvis.example.app");
+});
+test("config: covers every setting VIC may need to set", () => {
+  for (const k of ["MS_CLIENT_ID", "MS_CLIENT_SECRET", "APP_URL", "ICS_URL", "THRIFTIN_FEED_URL", "THRIFTIN_FEED_TOKEN", "JARVIS_MODEL", "ANTHROPIC_API_KEY"]) {
+    ok((CONFIG_KEYS as readonly string[]).includes(k), `${k} in CONFIG_KEYS`);
+  }
+  ok(!(CONFIG_KEYS as readonly string[]).includes("CRON_SECRET"), "generated secrets are not config keys");
+});

@@ -11,13 +11,14 @@
 // verify_jwt is off (a browser coming back from Microsoft has no Supabase
 // login); the signed ticket/state prove it was started from VIC's Jarvis.
 
-import { APP_URL } from "../_shared/env.ts";
+import { config } from "../_shared/config.ts";
 import { signState, verifyState } from "../_shared/crypto.ts";
 import { appSecret } from "../_shared/secrets.ts";
 import { authorizeUrl, connectWithCode } from "../_shared/graph.ts";
 
-const back = (params: Record<string, string>) => {
-  const target = `${APP_URL || "/"}?${new URLSearchParams({ tab: "settings", ...params })}`;
+const back = async (params: Record<string, string>): Promise<Response> => {
+  const appUrl = await config("APP_URL").catch(() => "");
+  const target = `${appUrl || "/"}?${new URLSearchParams({ tab: "settings", ...params })}`;
   return new Response(null, { status: 302, headers: { Location: target } });
 };
 
@@ -31,7 +32,7 @@ Deno.serve(async (req) => {
       return back({ ms: "error", reason: "That link expired. Tap Connect Hotmail again." });
     }
     try {
-      return new Response(null, { status: 302, headers: { Location: authorizeUrl(await signState(`${secret}:state`)) } });
+      return new Response(null, { status: 302, headers: { Location: await authorizeUrl(await signState(`${secret}:state`)) } });
     } catch (e) {
       return back({ ms: "error", reason: String((e as Error).message ?? e).slice(0, 200) });
     }

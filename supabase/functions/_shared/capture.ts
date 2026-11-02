@@ -21,7 +21,7 @@ export async function capture(text: string, opts: { lang?: string | null; source
   ) as { id: string; short_id: string };
 
   const unsortedReply = sv ? "Sparat som anteckning. Säg \"sortera mina anteckningar\" i Claude." : "Saved as a note. Say \"sort my notes\" in Claude.";
-  if (!hasClaude()) return { capture_id: cap.id, mode: "unsorted", reply: unsortedReply, items: [] };
+  if (!(await hasClaude())) return { capture_id: cap.id, mode: "unsorted", reply: unsortedReply, items: [] };
 
   const now = new Date();
   const lanes = (must(await sb.from("lanes").select("id, slug, name, description").order("sort"), "lanes") ?? []) as Lane[];

@@ -10,7 +10,8 @@
 //   scan_now    brief_now    calendar_sync    buy_list
 
 import { CORS, errorText, json } from "../_shared/http.ts";
-import { env, SUPABASE_URL } from "../_shared/env.ts";
+import { SUPABASE_URL } from "../_shared/env.ts";
+import { config } from "../_shared/config.ts";
 import { HttpError, requireOwner } from "../_shared/db.ts";
 import { completeItem, skipItem, stats } from "../_shared/items.ts";
 import { push } from "../_shared/push.ts";
@@ -37,22 +38,26 @@ Deno.serve(async (req) => {
         return json(await skipItem(String(b.id ?? ""), String(b.reason ?? "")));
       case "stats":
         return json(await stats(now));
-      case "status":
+      case "status": {
+        const [msId, msSecret, ics, feedUrl, feedToken, appUrl] = await Promise.all(
+          (["MS_CLIENT_ID", "MS_CLIENT_SECRET", "ICS_URL", "THRIFTIN_FEED_URL", "THRIFTIN_FEED_TOKEN", "APP_URL"] as const).map((k) => config(k)),
+        );
         return json({
-          claude_api: hasClaude(),
+          claude_api: await hasClaude(),
           hotmail: await msStatus(),
-          hotmail_ready: !!(env("MS_CLIENT_ID") && env("MS_CLIENT_SECRET")),
+          hotmail_ready: !!(msId && msSecret),
           hotmail_redirect_uri: redirectUri(),
-          calendars: icsUrls(env("ICS_URL")).length,
-          thriftin: !!(env("THRIFTIN_FEED_URL") && env("THRIFTIN_FEED_TOKEN")),
-          app_url: env("APP_URL") || null,
+          calendars: icsUrls(ics).length,
+          thriftin: !!(feedUrl && feedToken),
+          app_url: appUrl || null,
         });
+      }
       case "vapid":
         return json({ key: (await vapidKeys()).public });
       case "push_test":
         return json(await push({ title: "Jarvis test", body: "Alerts work on this device.", url: "/?tab=settings", tag: "test" }));
       case "ms_start": {
-        if (!env("MS_CLIENT_ID") || !env("MS_CLIENT_SECRET")) throw new HttpError(400, "MS_CLIENT_ID / MS_CLIENT_SECRET are not set in the function secrets yet");
+        if (!(await config("MS_CLIENT_ID")) || !(await config("MS_CLIENT_SECRET"))) throw new HttpError(400, "MS_CLIENT_ID / MS_CLIENT_SECRET are not set yet");
         const ticket = await signState(`${await appSecret("STATE_SECRET")}:start`);
         return json({ url: `${SUPABASE_URL}/functions/v1/ms-auth?start=1&t=${encodeURIComponent(ticket)}` });
       }

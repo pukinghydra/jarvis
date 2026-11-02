@@ -78,3 +78,16 @@ end $$;
 -- short ids
 do $$ begin assert (select bool_and(short_id = left(id::text, 8)) from items), 'short_id'; end $$;
 select 'ALL SQL CHECKS PASSED' as result;
+
+-- service role (edge functions) can read and write what it needs
+reset role;
+set role service_role;
+do $$ begin
+  assert (select count(*) from public.app_secrets where key = 'STATE_SECRET') = 1, 'service reads app_secrets';
+  insert into public.sent_log (key) values ('check:service');
+  insert into public.item_log (item_id, title, occurred_on, outcome) select id, title, current_date, 'done' from public.items limit 1;
+  perform * from public.claim_due_reminders(now());
+  insert into public.ms_tokens (id, refresh_token) values (1, 'x') on conflict (id) do update set refresh_token = 'x';
+end $$;
+reset role;
+select 'SERVICE ROLE CHECKS PASSED';

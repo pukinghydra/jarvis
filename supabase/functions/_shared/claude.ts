@@ -11,17 +11,18 @@
 //  - checks stop_reason before reading the answer.
 
 import Anthropic from "npm:@anthropic-ai/sdk@1.3.0";
-import { env } from "./env.ts";
+import { config } from "./config.ts";
 
-export const MODEL = env("JARVIS_MODEL") || "claude-opus-5-5";
+export const DEFAULT_MODEL = "claude-opus-5-5";
+export const model = async (): Promise<string> => (await config("JARVIS_MODEL")) || DEFAULT_MODEL;
 // Models that accept `fallbacks: "default"` (Claude API). Others go without.
 const FALLBACK_OK = new Set(["claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-fable-5"]);
 
-export const hasClaude = (): boolean => !!env("ANTHROPIC_API_KEY");
+export const hasClaude = async (): Promise<boolean> => !!(await config("ANTHROPIC_API_KEY").catch(() => ""));
 
 let client: Anthropic | null = null;
-function anthropic(): Anthropic {
-  const apiKey = env("ANTHROPIC_API_KEY");
+async function anthropic(): Promise<Anthropic> {
+  const apiKey = await config("ANTHROPIC_API_KEY");
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
   return (client ??= new Anthropic({ apiKey, maxRetries: 2, timeout: 120_000 }));
 }
@@ -35,6 +36,7 @@ export async function askJson<T>(opts: {
   effort: "low" | "medium" | "high";
   maxTokens?: number;
 }): Promise<T> {
+  const MODEL = await model();
   const params: any = {
     model: MODEL,
     max_tokens: opts.maxTokens ?? 12000,
@@ -50,7 +52,7 @@ export async function askJson<T>(opts: {
   }
   let res: any;
   try {
-    res = await anthropic().beta.messages.create(params);
+    res = await (await anthropic()).beta.messages.create(params);
   } catch (e) {
     if (e instanceof Anthropic.AuthenticationError) throw new Error("Claude API key is wrong or revoked (ANTHROPIC_API_KEY)");
     if (e instanceof Anthropic.RateLimitError) throw new Error("Claude is rate limited right now; try again in a minute");

@@ -6,7 +6,7 @@
 // never to anything that came from an email.
 
 import webpush from "npm:web-push@3.6.7";
-import { APP_URL } from "./env.ts";
+import { config } from "./config.ts";
 import { sb } from "./db.ts";
 import { appSecret, vapidKeys } from "./secrets.ts";
 
@@ -19,7 +19,7 @@ export async function push(msg: PushMsg) {
   try {
     const keys = await vapidKeys();
     // Subject: a contact URL for the push services (the app, else the project).
-    webpush.setVapidDetails(APP_URL || (await appSecret("PROJECT_URL")) || "https://supabase.com", keys.public, keys.private);
+    webpush.setVapidDetails((await config("APP_URL")) || (await appSecret("PROJECT_URL")) || "https://supabase.com", keys.public, keys.private);
   } catch (e: any) {
     return { ...out, error: `push keys: ${e?.message ?? e}` };
   }

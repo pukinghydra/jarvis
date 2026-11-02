@@ -8,7 +8,7 @@
 // Window: yesterday to +8 days. Called by the tick every 10 minutes and by
 // the app's refresh button.
 
-import { env } from "./env.ts";
+import { config } from "./config.ts";
 import { sb } from "./db.ts";
 import { icsName, parseIcs } from "./ics.ts";
 import { calendarView, accessToken } from "./graph.ts";
@@ -29,7 +29,7 @@ export async function syncCalendar(now: Date) {
   const answered: [string, string][] = [];
   const syncedAt = new Date().toISOString();
 
-  const urls = icsUrls(env("ICS_URL"));
+  const urls = icsUrls(await config("ICS_URL"));
   for (let i = 0; i < urls.length; i++) {
     const fallbackName = `Calendar ${i + 1}`;
     try {

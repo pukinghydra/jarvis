@@ -66,17 +66,24 @@ Set in Supabase → Edge Functions → Secrets (Jarvis project):
 
 ## Deploy order
 
-1. **Migration** → Jarvis project (`supabase/migrations/…_jarvis_init.sql`).
+1. **Migrations** → Jarvis project, in order (`supabase/migrations/`; file
+   names = the live versions). Live since 2026-11-02: `jarvis_init`,
+   `jarvis_cron` (= `supabase/cron.sql`), `service_role_grants`.
 2. **Auth** → Authentication → Sign In / Providers: Email on. URL
    Configuration → Site URL = the Vercel URL (after step 7).
 3. **Secrets** (table above). `MS_*` can come later; Hotmail just shows
    "not connected" until then.
 4. **Functions** (Jarvis): `api`, `capture`, `tick`, `ms-auth`, `mcp`, all
-   with verify_jwt **off** (`supabase functions deploy <name> --no-verify-jwt`).
+   with verify_jwt **off** (from `supabase/config.toml`). Deployed by the
+   GitHub Action `.github/workflows/deploy-functions.yml` on every push to
+   `main` that touches `supabase/functions/**`, or by hand (Actions → Deploy
+   edge functions → Run workflow). Needs the repo secret
+   `SUPABASE_ACCESS_TOKEN` (Supabase → Account → Access Tokens).
 5. **THRIFTIN**: secret `JARVIS_FEED_TOKEN`, deploy `jarvis-feed` with
    verify_jwt off.
-6. **Cron**: run `supabase/cron.sql` in the Jarvis SQL editor (no edits
-   needed). Check after 2 minutes with the queries at the bottom of the file.
+6. **Cron**: `supabase/cron.sql` (applied live as migration `jarvis_cron`;
+   no edits needed). Check after 2 minutes with the queries at the bottom of
+   the file. Until `tick` is deployed its calls answer 404; harmless.
 7. **Web** on Vercel: import `pukinghydra/jarvis`, Root Directory `web`,
    framework Vite, env `VITE_SUPABASE_URL=https://mcrpchqkconbesgborhj.supabase.co`
    and `VITE_SUPABASE_ANON_KEY=<publishable key>`. Then set `APP_URL`.
