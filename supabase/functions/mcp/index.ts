@@ -7,9 +7,10 @@
 import { appSecret } from "../_shared/secrets.ts";
 import { timingSafeEqual } from "../_shared/crypto.ts";
 import { handleBody } from "../_shared/mcp-core.ts";
-import { buildTools, INSTRUCTIONS } from "../_shared/mcp-tools.ts";
+import { buildTools } from "../_shared/tools.ts";
+import { INSTRUCTIONS } from "../_shared/tool-defs.ts";
 
-const tools = buildTools();
+const tools = buildTools({ source: "mcp" });
 const H = { "Content-Type": "application/json", "Cache-Control": "no-store" };
 
 Deno.serve(async (req) => {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { configured, supabase, must } from "./lib/supabase.js";
 import { registerSW } from "./lib/push.js";
 import Login from "./screens/Login.jsx";
-import Capture from "./screens/Capture.jsx";
+import Talk from "./screens/Talk.jsx";
 import Today from "./screens/Today.jsx";
 import Lanes from "./screens/Lanes.jsx";
 import Brief from "./screens/Brief.jsx";
@@ -55,7 +55,7 @@ export default function App() {
   return (
     <div className="app">
       <main>
-        {tab === "capture" && <Capture lanes={lanes} onSaved={bump} />}
+        {tab === "capture" && <Talk onSaved={bump} />}
         {tab === "today" && <Today lanes={lanes} refreshKey={refreshKey} onChange={bump} />}
         {tab === "lanes" && <Lanes lanes={lanes} reloadLanes={loadLanes} refreshKey={refreshKey} onChange={bump} />}
         {tab === "brief" && <Brief />}

@@ -18,12 +18,12 @@ export const model = async (): Promise<string> => (await config("JARVIS_MODEL"))
 // Email sorting can run on its own (cheaper) model: JARVIS_TRIAGE_MODEL.
 export const triageModel = async (): Promise<string> => (await config("JARVIS_TRIAGE_MODEL")) || DEFAULT_MODEL;
 // Models that accept `fallbacks: "default"` (Claude API). Others go without.
-const FALLBACK_OK = new Set(["claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-fable-5"]);
+export const FALLBACK_OK = new Set(["claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-fable-5"]);
 
 export const hasClaude = async (): Promise<boolean> => !!(await config("ANTHROPIC_API_KEY").catch(() => ""));
 
 let client: Anthropic | null = null;
-async function anthropic(): Promise<Anthropic> {
+export async function anthropic(): Promise<Anthropic> {
   const apiKey = await config("ANTHROPIC_API_KEY");
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
   return (client ??= new Anthropic({ apiKey, maxRetries: 2, timeout: 120_000 }));

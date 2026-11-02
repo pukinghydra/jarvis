@@ -10,7 +10,7 @@ export default function Settings({ session }) {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState("");
-  const [readBack, setReadBack] = useState(prefs.readBack());
+  const [readAloud, setReadAloud] = useState(prefs.readAloud());
   const [travel, setTravel] = useState(30);
   const [vips, setVips] = useState("");
   const [copied, setCopied] = useState(false);
@@ -152,8 +152,8 @@ export default function Settings({ session }) {
 
       <section>
         <h3>Voice</h3>
-        <label className="toggle"><input type="checkbox" checked={readBack} onChange={(e) => { setReadBack(e.target.checked); prefs.setReadBack(e.target.checked); }} /> Read back what was saved</label>
-        <p className="muted small">Language is set on the mic screen (Svenska / English).</p>
+        <label className="toggle"><input type="checkbox" checked={readAloud} onChange={(e) => { setReadAloud(e.target.checked); prefs.setReadAloud(e.target.checked); }} /> Read answers aloud</label>
+        <p className="muted small">Language is set on the Talk screen (Svenska / English).</p>
       </section>
 
       <section>

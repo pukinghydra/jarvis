@@ -91,3 +91,34 @@ do $$ begin
 end $$;
 reset role;
 select 'SERVICE ROLE CHECKS PASSED';
+
+-- chat history and memories: the functions write, the owner only reads,
+-- anyone else sees nothing
+set role service_role;
+do $$ begin
+  assert (select count(*) from public.memories) = 8, 'memories seeded';
+  insert into public.chat_messages (thread_id, role, content, display_text) values ('00000000-0000-0000-0000-000000000001', 'user', '[{"type":"text","text":"hej"}]', 'hej');
+  insert into public.memories (fact, tags) values ('test fact', '{test}');
+end $$;
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+do $$ begin
+  assert (select count(*) from public.chat_messages) = 1, 'owner reads chat';
+  assert (select count(*) from public.memories) = 9, 'owner reads memories';
+  begin insert into public.chat_messages (thread_id, role, content) values ('00000000-0000-0000-0000-000000000001', 'user', '[]'); raise exception 'owner writes chat'; exception when insufficient_privilege then null; end;
+  begin delete from public.memories; raise exception 'owner deletes memories'; exception when insufficient_privilege then null; end;
+end $$;
+select set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
+do $$ begin
+  assert (select count(*) from public.chat_messages) = 0, 'other reads no chat';
+  assert (select count(*) from public.memories) = 0, 'other reads no memories';
+end $$;
+reset role;
+set role anon;
+do $$ begin
+  begin perform 1 from public.chat_messages; raise exception 'anon reads chat'; exception when insufficient_privilege then null; end;
+  begin perform 1 from public.memories; raise exception 'anon reads memories'; exception when insufficient_privilege then null; end;
+end $$;
+reset role;
+select 'CHAT + MEMORY CHECKS PASSED';

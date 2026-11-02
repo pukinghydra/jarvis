@@ -13,6 +13,7 @@ export const CONFIG_KEYS = [
   "THRIFTIN_FEED_TOKEN",
   "JARVIS_MODEL",
   "JARVIS_TRIAGE_MODEL",
+  "JARVIS_CHAT_EFFORT",
   "ANTHROPIC_API_KEY",
 ] as const;
 export type ConfigKey = typeof CONFIG_KEYS[number];

@@ -29,8 +29,23 @@ textarea.input { resize: vertical; }
 .tabs button span { font-size: 22px; }
 .tabs button.on { color: var(--text); }
 
-/* Capture */
-.capture { display: flex; flex-direction: column; align-items: stretch; }
+/* Talk */
+.talk { display: flex; flex-direction: column; min-height: calc(100vh - 76px - env(safe-area-inset-bottom)); }
+.talk-top { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; margin: 4px 0 8px; }
+.talk-top .lang-toggle { margin: 0; }
+.chat-log { flex: 1; display: flex; flex-direction: column; gap: 8px; padding: 8px 0; }
+.bubble { max-width: 88%; padding: 10px 12px; border-radius: 16px; white-space: pre-wrap; word-break: break-word; }
+.bubble.user { align-self: flex-end; background: #1d3a6e; border-bottom-right-radius: 4px; }
+.bubble.assistant { align-self: flex-start; background: var(--card); border-bottom-left-radius: 4px; }
+.bubble.live { opacity: .7; font-style: italic; }
+.bubble.thinking { color: var(--muted); }
+.bubble.error { background: #3a1414; color: #fecaca; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.chip { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: #0f2e1c; color: #bbf7d0; }
+.chip.bad { background: #3a1414; color: #fecaca; }
+.talk-bottom { position: sticky; bottom: calc(76px + env(safe-area-inset-bottom)); background: var(--bg); padding-top: 8px; display: flex; flex-direction: column; }
+.mic.small-mic { width: 96px; height: 96px; font-size: 40px; }
+.stop-talk { margin-left: 8px; }
 .lang-toggle { display: flex; gap: 6px; justify-content: center; margin: 8px 0 24px; }
 .lang-toggle button { min-height: 36px; padding: 6px 14px; background: transparent; border: 1px solid var(--line); }
 .lang-toggle button.on { background: var(--card); border-color: var(--accent); }

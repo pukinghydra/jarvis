@@ -17,6 +17,19 @@ export async function api(action, body = {}) {
   return data;
 }
 
+// The Talk screen: chat("say", { text, lang, source }), chat("history"),
+// chat("new_topic").
+export async function chat(action, body = {}) {
+  const { data, error } = await supabase.functions.invoke("chat", { body: { action, ...body } });
+  if (error) {
+    let msg = error.message;
+    try { const j = await error.context?.json?.(); if (j?.error) msg = j.error; } catch { /* keep message */ }
+    throw new Error(msg);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+
 export async function captureNote(text, lang, source) {
   const { data, error } = await supabase.functions.invoke("capture", { body: { text, lang, source } });
   if (error) {
