@@ -8,6 +8,6 @@ declare module "npm:web-push@3.6.7" { const w: any; export default w; }
 // Node built-in used only by the tests (no @types/node in this repo).
 declare module "node:fs" { export function readFileSync(path: string | URL, encoding: "utf8"): string; }
 declare const Deno: {
-  env: { get(name: string): string | undefined };
+  env: { get(name: string): string | undefined; toObject(): Record<string, string> };
   serve(handler: (req: Request) => Response | Promise<Response>): void;
 };
