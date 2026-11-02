@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+.env.local
+web/.env*
+!web/.env.example
+.DS_Store
+supabase/.temp/

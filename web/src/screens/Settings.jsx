@@ -1,0 +1,112 @@
+import { useEffect, useState } from "react";
+import { api, supabase, must } from "../lib/supabase.js";
+import { enablePush, pushState, isStandalone } from "../lib/push.js";
+import { prefs } from "../lib/prefs.js";
+
+export default function Settings({ session }) {
+  const [status, setStatus] = useState(null);
+  const [owner, setOwner] = useState(null);
+  const [push, setPush] = useState("…");
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState("");
+  const [readBack, setReadBack] = useState(prefs.readBack());
+  const [travel, setTravel] = useState(30);
+  const [vips, setVips] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const load = async () => {
+    try {
+      const [st, os, sets] = await Promise.all([
+        api("status"),
+        supabase.rpc("owner_settings").then(must),
+        supabase.from("settings").select("key, value").then(must),
+      ]);
+      setStatus(st); setOwner(os);
+      const map = Object.fromEntries(sets.map((r) => [r.key, r.value]));
+      setTravel(Number(map.travel_minutes ?? 30));
+      setVips((map.vip_senders ?? []).join(", "));
+    } catch (e) { setErr(e.message); }
+    setPush(await pushState().catch(() => "unsupported"));
+  };
+  useEffect(() => {
+    load();
+    const q = new URLSearchParams(location.search);
+    if (q.get("ms") === "ok") setMsg(`Hotmail connected: ${q.get("account") ?? ""}`);
+    if (q.get("ms") === "error") setErr(`Hotmail: ${q.get("reason") ?? "failed"}`);
+  }, []);
+
+  const act = async (name, fn) => {
+    setBusy(name); setErr(""); setMsg("");
+    try { const r = await fn(); if (typeof r === "string") setMsg(r); await load(); } catch (e) { setErr(e.message); } finally { setBusy(""); }
+  };
+  const saveSetting = (key, value) => act(key, async () => { must(await supabase.from("settings").upsert({ key, value, updated_at: new Date().toISOString() })); return "Saved"; });
+
+  const copyMcp = async () => {
+    try { await navigator.clipboard.writeText(owner.mcp_url); setCopied(true); setTimeout(() => setCopied(false), 2500); }
+    catch { window.prompt("Copy this URL", owner.mcp_url); }
+  };
+
+  const hm = status?.hotmail;
+  return (
+    <div className="screen settings">
+      {msg && <div className="ok">{msg}</div>}
+      {err && <div className="err">{err}</div>}
+
+      <section>
+        <h3>Connect to Claude</h3>
+        <p className="muted small">Claude app → Settings → Connectors → Add custom connector → paste this URL. Keep it secret: it is the key to Jarvis.</p>
+        <button className="primary" onClick={copyMcp} disabled={!owner?.mcp_url}>{copied ? "Copied ✓" : "Copy connector URL"}</button>
+      </section>
+
+      <section>
+        <h3>Alerts on this device</h3>
+        <p className="muted small">Status: {push}{!isStandalone() ? " · on iPhone, add Jarvis to the Home Screen first (Share → Add to Home Screen)" : ""}</p>
+        <div className="row">
+          <button className="primary" disabled={!!busy || push === "on"} onClick={() => act("push", async () => { await enablePush(); return "Alerts are on for this device"; })}>Turn alerts on</button>
+          <button className="ghost" disabled={!!busy} onClick={() => act("test", async () => { const r = await api("push_test"); return `Test sent to ${r.sent}/${r.devices} devices`; })}>Send test</button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Hotmail</h3>
+        <p className="muted small">{hm?.connected ? `Connected: ${hm.account ?? "yes"}` : status?.hotmail_ready ? "Not connected" : "Waiting for MS_CLIENT_ID / MS_CLIENT_SECRET in the function secrets"}</p>
+        <div className="row">
+          {!hm?.connected && <button className="primary" disabled={!!busy || !status?.hotmail_ready} onClick={() => act("ms", async () => { const { url } = await api("ms_start"); location.href = url; })}>Connect Hotmail</button>}
+          {hm?.connected && <button className="ghost" disabled={!!busy} onClick={() => act("scan", async () => { const r = await api("scan_now"); return r.skipped ?? `Fetched ${r.fetched}, new ${r.new}, flagged ${r.flagged}`; })}>Check mail now</button>}
+          {hm?.connected && <button className="ghost danger" disabled={!!busy} onClick={() => window.confirm("Disconnect Hotmail?") && act("msd", async () => { await api("ms_disconnect"); return "Disconnected"; })}>Disconnect</button>}
+        </div>
+        <label className="field">VIP senders (always flagged) — addresses or @domains, comma separated
+          <input className="input" value={vips} onChange={(e) => setVips(e.target.value)} onBlur={() => saveSetting("vip_senders", vips.split(",").map((v) => v.trim()).filter(Boolean))} placeholder="richie@…, @skatteverket.se" />
+        </label>
+      </section>
+
+      <section>
+        <h3>Voice</h3>
+        <label className="toggle"><input type="checkbox" checked={readBack} onChange={(e) => { setReadBack(e.target.checked); prefs.setReadBack(e.target.checked); }} /> Read back what was saved</label>
+        <p className="muted small">Language is set on the mic screen (Svenska / English).</p>
+      </section>
+
+      <section>
+        <h3>Leave-now alerts</h3>
+        <label className="field">Minutes to get somewhere (default)
+          <input className="input" type="number" min="0" max="600" value={travel} onChange={(e) => setTravel(e.target.value)} onBlur={() => saveSetting("travel_minutes", Math.max(0, Math.min(600, Number(travel) || 30)))} />
+        </label>
+      </section>
+
+      <section>
+        <h3>Status</h3>
+        <ul className="status-list">
+          <li>Calendars linked: {status?.calendars ?? "–"}</li>
+          <li>THRIFTIN data: {status ? (status.thriftin ? "connected" : "not connected") : "–"}</li>
+          <li>Auto-sort notes (Claude API): {status ? (status.claude_api ? "on" : "off — sort them in the Claude app") : "–"}</li>
+        </ul>
+      </section>
+
+      <section>
+        <p className="muted small">Signed in as {session.user.email}</p>
+        <button className="ghost" onClick={() => supabase.auth.signOut()}>Sign out</button>
+      </section>
+    </div>
+  );
+}

@@ -1,0 +1,23 @@
+# Supabase CLI settings for Jarvis (project mcrpchqkconbesgborhj, eu-north-1,
+# org "Vic Personal").
+#
+# verify_jwt is off for every function. The ones the app calls (api,
+# capture) check the caller themselves: a valid login AND the owner
+# (requireOwner). That also works with Supabase's newer JWT signing keys,
+# where the gateway's legacy check can reject valid logins.
+project_id = "mcrpchqkconbesgborhj"
+
+[functions.api]
+verify_jwt = false   # owner checked in code
+
+[functions.capture]
+verify_jwt = false   # owner checked in code
+
+[functions.tick]
+verify_jwt = false   # pg_cron, checked with x-cron-secret (app_secrets)
+
+[functions.ms-auth]
+verify_jwt = false   # browser coming back from Microsoft, signed ticket/state
+
+[functions.mcp]
+verify_jwt = false   # Claude connector, secret URL path (app_secrets MCP_KEY)
