@@ -1,6 +1,6 @@
 -- Behaviour checks on the migrated schema. Each block raises on failure.
 \set ON_ERROR_STOP on
-insert into auth.users values ('11111111-1111-1111-1111-111111111111', 'vic@example.com'), ('22222222-2222-2222-2222-222222222222', 'other@example.com');
+insert into auth.users values ('11111111-1111-1111-1111-111111111111', 'Victor.Bergh@hotmail.com', null), ('22222222-2222-2222-2222-222222222222', 'other@example.com', now());
 
 -- generated secrets exist and look random
 do $$ begin
@@ -11,9 +11,16 @@ do $$ begin
   assert (select count(*) from items i where (i.due_at at time zone 'Europe/Stockholm')::time = '17:00') = 2, 'seed at 17:00 local';
 end $$;
 
--- owner claim: first user wins, second can't
+-- owner claim: only VIC's confirmed Hotmail login can claim; a stranger who
+-- signs up first gets nothing, and an unconfirmed VIC login waits.
 set role authenticated;
+select set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
+do $$ begin assert public.claim_owner() = false, 'stranger first cannot claim'; end $$;
 select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+do $$ begin assert public.claim_owner() = false, 'unconfirmed vic cannot claim yet'; end $$;
+reset role;
+update auth.users set email_confirmed_at = now() where id = '11111111-1111-1111-1111-111111111111';
+set role authenticated;
 do $$ begin assert public.claim_owner() = true, 'vic claims'; end $$;
 do $$ begin assert (select count(*) from public.lanes) = 6, 'owner reads lanes'; end $$;
 do $$ begin assert (public.owner_settings() ->> 'mcp_url') like 'https://mcrpchqkconbesgborhj.supabase.co/functions/v1/mcp/%', 'owner_settings'; end $$;

@@ -26,12 +26,19 @@ $$;
 revoke all on function public.is_owner() from public, anon;
 grant execute on function public.is_owner() to authenticated;
 
--- The first signed-in user becomes the owner; after that nobody else can.
+-- Only VIC's confirmed Hotmail login can become the owner, so a stranger who
+-- signs up before VIC does gets nothing. After that nobody else can.
 -- Returns true when the caller is the owner (now or already).
 create or replace function public.claim_owner() returns boolean
 language plpgsql security definer set search_path = public as $$
 begin
   if auth.uid() is null then return false; end if;
+  if not exists (select 1 from auth.users
+                  where id = auth.uid()
+                    and lower(email) = 'victor.bergh@hotmail.com'
+                    and email_confirmed_at is not null) then
+    return exists (select 1 from public.owner where user_id = auth.uid());
+  end if;
   insert into public.owner (id, user_id) values (1, auth.uid()) on conflict (id) do nothing;
   return exists (select 1 from public.owner where user_id = auth.uid());
 end $$;
