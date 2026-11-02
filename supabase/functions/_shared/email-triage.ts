@@ -16,9 +16,10 @@
 // prompts say instructions in emails are never followed. No link from an
 // email ever reaches a push or an item (email-triage-core.ts strips them).
 
-import { sb, must, claimOnce } from "./db.ts";
+import { sb, must, claimOnce, getSetting } from "./db.ts";
 import { askJson, hasClaude, model, triageModel } from "./claude.ts";
-import { draftReply } from "./email.ts";
+import { cleanupEmail, draftReply } from "./email.ts";
+import { applyVintedRule, DEFAULT_MAIL_RULES, hardNoise } from "./mail-rules-core.ts";
 import { push } from "./push.ts";
 import { styleFor } from "./style.ts";
 import { localDateStr, localTimeStr, weekdayName } from "./time.ts";
@@ -77,12 +78,34 @@ async function triageLocked(now: Date, notify: boolean) {
     "draft backlog",
   ) ?? [];
 
-  const pending = must(
-    await sb.from("emails").select("id, graph_id, from_name, from_address, subject, received_at, body, status, draft_id")
-      .is("triaged_at", null).eq("status", "new").order("received_at", { ascending: false }).limit(TRIAGE_MAX_PER_RUN),
+  const unsorted = must(
+    await sb.from("emails").select("id, graph_id, from_name, from_address, subject, received_at, body, status, draft_id, bulk_reason, triage")
+      .is("triaged_at", null).in("status", ["new", "drafted"]).order("received_at", { ascending: false }).limit(TRIAGE_MAX_PER_RUN),
     "untriaged emails",
   ) ?? [];
-  if (!pending.length && !backlog.length) return { triaged: 0 };
+  if (!unsorted.length && !backlog.length) return { triaged: 0 };
+
+  // VIC's rules: what code can decide for certain is decided here, without
+  // a Claude call (mass mail, Vinted that isn't a return, ignored senders).
+  const [rulesSetting, vips, ignore] = await Promise.all([
+    getSetting<unknown>("mail_rules", DEFAULT_MAIL_RULES),
+    getSetting<unknown>("vip_senders", []),
+    getSetting<unknown>("mail_ignore", []),
+  ]);
+  const rules = typeof rulesSetting === "string" ? rulesSetting : DEFAULT_MAIL_RULES;
+  let hard = 0;
+  const pending: any[] = [];
+  for (const e of unsorted as any[]) {
+    const reason = hardNoise(e, { vips, ignore });
+    if (!reason) { pending.push(e); continue; }
+    must(await sb.from("emails").update({
+      importance: "noise", summary: String(e.subject ?? "(no subject)").slice(0, 160), why: reason.slice(0, 120),
+      needs_reply: false, reply_language: null, triaged_at: now.toISOString(), triage: { hard: reason },
+    }).eq("id", e.id), "save rule triage");
+    if (e.draft_id || e.triage) await cleanupEmail(e, "noise");
+    hard++;
+  }
+  if (!pending.length && !backlog.length) return { triaged: hard, hard, urgent: 0, important: 0, noise: hard, items: 0, drafts: 0 };
 
   const nowLocal = `${weekdayName(localDateStr(now))} ${localDateStr(now)} ${localTimeStr(now)}`;
   const tModel = await triageModel();
@@ -91,7 +114,7 @@ async function triageLocked(now: Date, notify: boolean) {
     const asked: TriageEmail[] = batch.map((e) => ({
       id: e.id, from_name: e.from_name, from_address: e.from_address, subject: e.subject, received_at: e.received_at, body: e.body,
     }));
-    const raw = await askJson<unknown>({ system: TRIAGE_SYSTEM, user: triageUser(asked, nowLocal), schema: TRIAGE_SCHEMA, effort: "low", model: tModel, maxTokens: 16000 });
+    const raw = await askJson<unknown>({ system: TRIAGE_SYSTEM, user: triageUser(asked, nowLocal, rules), schema: TRIAGE_SCHEMA, effort: "low", model: tModel, maxTokens: 16000 });
     return validateTriage(raw, asked.map((a) => a.id));
   });
 
@@ -108,13 +131,21 @@ async function triageLocked(now: Date, notify: boolean) {
   const urgent: any[] = [];
   const toDraft: { email: any; t: Triage }[] = [];
 
-  for (const [id, t] of triage) {
+  for (const [id, t0] of triage) {
     const email = byId.get(id);
     if (!email) continue;
+    const t = applyVintedRule(t0, email, now);
+    triage.set(id, t);
     must(await sb.from("emails").update({
       importance: t.importance, summary: t.summary, why: t.why, needs_reply: t.needs_reply,
-      reply_language: t.reply_language, triaged_at: now.toISOString(), triage: { actions: t.actions, model: tModel },
+      reply_language: t.reply_language, triaged_at: now.toISOString(),
+      triage: { actions: t.actions, model: tModel, ...(t.vinted_return ? { vinted_return: true } : {}) },
     }).eq("id", id), "save triage");
+
+    // Sorted again (rules changed): the new verdict decides Jarvis's own
+    // open to-dos for this email, so the old ones go first.
+    if (email.triage) must(await sb.from("items").delete().eq("email_id", id).eq("status", "open").eq("source", "email"), "replace email to-dos");
+    if (t.importance === "noise" && (email.draft_id || email.triage)) await cleanupEmail(email, "noise");
 
     // Action items, once per email + title.
     if (t.actions.length) {
@@ -150,10 +181,11 @@ async function triageLocked(now: Date, notify: boolean) {
   for (const d of drafted) if (d.status === "rejected") errors.push(String((d.reason as Error)?.message ?? d.reason));
 
   return {
-    triaged: triage.size,
+    triaged: triage.size + hard,
+    hard,
     urgent: urgent.length,
     important: [...triage.values()].filter((t) => t.importance === "important").length,
-    noise: [...triage.values()].filter((t) => t.importance === "noise").length,
+    noise: [...triage.values()].filter((t) => t.importance === "noise").length + hard,
     items: itemsAdded,
     drafts: drafted.filter((d) => d.status === "fulfilled" && d.value).length,
     ...(errors.length ? { errors: errors.slice(0, 3) } : {}),

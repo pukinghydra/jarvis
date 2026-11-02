@@ -4,15 +4,19 @@
 // writes reply drafts with draft_reply. Nothing here ever sends email.
 
 import { sb, must, getSetting, HttpError } from "./db.ts";
-import { accessToken, createReplyDraft, inboxSince } from "./graph.ts";
+import { accessToken, createReplyDraft, deleteMessage, inboxSince, inboxState, messageMeta, sentSince } from "./graph.ts";
 import { cleanBody, flagEmail } from "./email-rules.ts";
+import { answeredState, bulkHeaders, cleanupPlan, deleteJarvisDraft } from "./mail-rules-core.ts";
 import { push } from "./push.ts";
 
 export async function scanEmails(now: Date, opts: { notify?: boolean } = {}) {
   if (!(await accessToken().catch(() => null))) return { skipped: "Hotmail not connected" };
   const since = new Date(now.getTime() - 26 * 3600_000);
   const messages = await inboxSince(since, 50);
-  if (!messages.length) return { fetched: 0, new: 0, flagged: 0 };
+  if (!messages.length) {
+    const recheck = await recheckOpen(now).catch((e) => ({ error: String((e as Error)?.message ?? e) }));
+    return { fetched: 0, new: 0, flagged: 0, recheck };
+  }
 
   // Already stored? (look up by time, not by a long list of ids in the URL)
   const oldest = messages.reduce((t, m) => Math.min(t, Date.parse(m.received_at)), Date.now());
@@ -29,6 +33,7 @@ export async function scanEmails(now: Date, opts: { notify?: boolean } = {}) {
     return {
       graph_id: m.id, received_at: m.received_at, from_name: m.from_name, from_address: m.from_address,
       subject: m.subject, preview: cleanBody(m.preview, 300), body, flagged: reasons.length > 0, flag_reasons: reasons,
+      conversation_id: m.conversation_id, bulk_reason: bulkHeaders(m.headers), last_verb: m.last_verb,
     };
   });
   if (rows.length) {
@@ -44,7 +49,78 @@ export async function scanEmails(now: Date, opts: { notify?: boolean } = {}) {
       tag: "email",
     });
   }
-  return { fetched: messages.length, new: rows.length, flagged: flagged.length };
+  const recheck = await recheckOpen(now).catch((e) => ({ error: String((e as Error)?.message ?? e) }));
+  return { fetched: messages.length, new: rows.length, flagged: flagged.length, recheck };
+}
+
+// Every scan: look at all open emails again. VIC may have answered one
+// (from his phone, hours later): then it is handled, Jarvis's own draft for
+// it is deleted (only while still a draft) and its "Send reply" item closed.
+// Also fills in conversation ids, mass-mail headers and the last verb for
+// emails stored before Jarvis read those.
+export async function recheckOpen(now: Date) {
+  const open = must(
+    await sb.from("emails").select("id, graph_id, conversation_id, received_at, status, draft_id, bulk_reason, last_verb")
+      .in("status", ["new", "drafted"]).gte("received_at", new Date(now.getTime() - 30 * 86400_000).toISOString())
+      .order("received_at", { ascending: true }).limit(300),
+    "open emails",
+  ) ?? [];
+  if (!open.length) return { checked: 0, answered: 0, updated: 0 };
+  const since = new Date(Date.parse((open[0] as any).received_at) - 60_000);
+  const [state, sent] = await Promise.all([inboxState(since), sentSince(since)]);
+  let answered = 0, updated = 0;
+  for (const e of open as any[]) {
+    const s = state.get(e.graph_id);
+    const patch: Record<string, unknown> = {};
+    if (s?.conversation_id && s.conversation_id !== e.conversation_id) patch.conversation_id = s.conversation_id;
+    if (s && s.last_verb !== null && s.last_verb !== e.last_verb) patch.last_verb = s.last_verb;
+    if (s?.headers && !e.bulk_reason) {
+      const b = bulkHeaders(s.headers);
+      if (b) patch.bulk_reason = b;
+    }
+    if (Object.keys(patch).length) {
+      must(await sb.from("emails").update(patch).eq("id", e.id), "update email state");
+      updated++;
+    }
+    const ans = answeredState(
+      { conversation_id: (patch.conversation_id as string) ?? e.conversation_id, received_at: e.received_at },
+      s ? s.last_verb : e.last_verb,
+      sent,
+    );
+    if (ans) {
+      await cleanupEmail(e, "answered", ans);
+      answered++;
+    }
+  }
+  return { checked: open.length, answered, updated };
+}
+
+// Tidy up after an email turned out answered, or noise:
+//  - Jarvis's own draft is deleted, but only while it is still a draft
+//    (only drafts Jarvis made have their id stored here);
+//  - answered: its "Send reply to ..." item is closed and the email handled;
+//  - noise: the to-dos Jarvis made from it and its "Send reply" item go.
+export async function cleanupEmail(email: { id: string; draft_id: string | null; status: string }, outcome: "answered" | "noise", reason: string = outcome) {
+  const plan = cleanupPlan(email, outcome);
+  let draft: string = "none";
+  if (plan.deleteDraft) {
+    draft = await deleteJarvisDraft(email.draft_id, { get: messageMeta, del: deleteMessage }).catch((e) => `error: ${(e as Error).message}`);
+  }
+  const now = new Date().toISOString();
+  if (outcome === "answered") {
+    must(await sb.from("items").update({ status: "done", done_at: now }).eq("email_id", email.id).eq("status", "open").ilike("title", "Send reply to%"), "close send-reply item");
+    must(await sb.from("emails").update({
+      status: "handled", handled_at: now, handled_reason: reason, answered_at: now,
+      ...(draft === "deleted" ? { draft_deleted_at: now } : {}),
+    }).eq("id", email.id), "mark answered");
+  } else {
+    must(await sb.from("items").delete().eq("email_id", email.id).eq("status", "open").ilike("title", "Send reply to%"), "remove send-reply item");
+    if (plan.deleteAutoItems) must(await sb.from("items").delete().eq("email_id", email.id).eq("status", "open").eq("source", "email"), "remove email to-dos");
+    if (draft === "deleted" || draft === "gone") {
+      must(await sb.from("emails").update({ status: email.status === "drafted" ? "new" : email.status, draft_deleted_at: now }).eq("id", email.id), "draft removed");
+    }
+  }
+  return { draft };
 }
 
 export async function resolveEmail(ref: string): Promise<any> {

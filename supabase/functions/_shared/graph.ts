@@ -82,6 +82,12 @@ export async function msDisconnect() {
   await sb.from("ms_tokens").delete().eq("id", 1);
 }
 
+export class GraphError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
 async function graphFetch(path: string, token: string, init: RequestInit = {}): Promise<any> {
   const res = await fetch(path.startsWith("http") ? path : `${GRAPH}${path}`, {
     ...init,
@@ -90,7 +96,7 @@ async function graphFetch(path: string, token: string, init: RequestInit = {}): 
   });
   if (res.status === 204) return null;
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`Graph ${res.status}: ${body?.error?.message ?? "error"}`);
+  if (!res.ok) throw new GraphError(res.status, `Graph ${res.status}: ${body?.error?.message ?? "error"}`);
   return body;
 }
 
@@ -108,17 +114,54 @@ export type MailMessage = {
   received_at: string;
   preview: string;
   body: string;
+  conversation_id: string | null;
+  headers: { name: string; value: string }[] | null; // null = not fetched
+  last_verb: number | null;                          // PidTagLastVerbExecuted
 };
 
-// Inbox mail received since `since`, newest first, bodies as plain text.
+// Outlook's "last verb" (0x1081): 102 replied, 103 replied all, 104 forwarded.
+const LAST_VERB = "Integer 0x1081";
+const EXPAND_VERB = `singleValueExtendedProperties($filter=id eq '${LAST_VERB}')`;
+const lastVerbOf = (m: any): number | null => {
+  const p = (m?.singleValueExtendedProperties ?? []).find((x: any) => String(x?.id ?? "").toLowerCase() === LAST_VERB.toLowerCase());
+  const n = Number(p?.value);
+  return Number.isFinite(n) ? n : null;
+};
+
+// GET a list, following @odata.nextLink up to `pages` pages.
+async function listAll(path: string, init: RequestInit, pages = 5): Promise<any[]> {
+  const out: any[] = [];
+  let next: string | null = path;
+  for (let i = 0; next && i < pages; i++) {
+    const r: any = await graph(next, init);
+    out.push(...(r?.value ?? []));
+    next = r?.["@odata.nextLink"] ?? null;
+  }
+  return out;
+}
+
+// Inbox mail received since `since`, newest first, bodies as plain text,
+// with the conversation id, the internet headers (mass-mail signals) and
+// the last verb (answered?). If Outlook refuses the extras, the plain
+// fields still come back (headers/last_verb null).
 export async function inboxSince(since: Date, top = 40): Promise<MailMessage[]> {
-  const q = new URLSearchParams({
+  const base = {
     $filter: `receivedDateTime ge ${since.toISOString()}`,
     $orderby: "receivedDateTime desc",
     $top: String(top),
-    $select: "id,subject,from,receivedDateTime,bodyPreview,body",
-  });
-  const r = await graph(`/me/mailFolders/inbox/messages?${q}`, { headers: { Prefer: 'outlook.body-content-type="text"' } });
+  };
+  const init = { headers: { Prefer: 'outlook.body-content-type="text"' } };
+  let r: any;
+  let rich = true;
+  try {
+    const q = new URLSearchParams({ ...base, $select: "id,subject,from,receivedDateTime,bodyPreview,body,conversationId,internetMessageHeaders", $expand: EXPAND_VERB });
+    r = await graph(`/me/mailFolders/inbox/messages?${q}`, init);
+  } catch (e) {
+    if (!(e instanceof GraphError) || e.status !== 400) throw e;
+    rich = false;
+    const q = new URLSearchParams({ ...base, $select: "id,subject,from,receivedDateTime,bodyPreview,body,conversationId" });
+    r = await graph(`/me/mailFolders/inbox/messages?${q}`, init);
+  }
   return (r?.value ?? []).map((m: any) => ({
     id: m.id,
     subject: m.subject ?? null,
@@ -127,7 +170,60 @@ export async function inboxSince(since: Date, top = 40): Promise<MailMessage[]> 
     received_at: m.receivedDateTime,
     preview: m.bodyPreview ?? "",
     body: String(m.body?.content ?? m.bodyPreview ?? ""),
+    conversation_id: m.conversationId ?? null,
+    headers: rich ? (Array.isArray(m.internetMessageHeaders) ? m.internetMessageHeaders : []) : null,
+    last_verb: rich ? lastVerbOf(m) : null,
   }));
+}
+
+// The state of inbox mail since `since` (no bodies): conversation, headers
+// and last verb. Used to re-check open emails every scan (VIC may have
+// answered from his phone). Map keyed by Graph message id.
+export async function inboxState(since: Date): Promise<Map<string, { conversation_id: string | null; headers: { name: string; value: string }[] | null; last_verb: number | null }>> {
+  const base = { $filter: `receivedDateTime ge ${since.toISOString()}`, $orderby: "receivedDateTime desc", $top: "100" };
+  let rows: any[];
+  let rich = true;
+  try {
+    rows = await listAll(`/me/mailFolders/inbox/messages?${new URLSearchParams({ ...base, $select: "id,conversationId,receivedDateTime,internetMessageHeaders", $expand: EXPAND_VERB })}`, {});
+  } catch (e) {
+    if (!(e instanceof GraphError) || e.status !== 400) throw e;
+    rich = false;
+    rows = await listAll(`/me/mailFolders/inbox/messages?${new URLSearchParams({ ...base, $select: "id,conversationId,receivedDateTime" })}`, {});
+  }
+  return new Map(rows.map((m: any) => [m.id, {
+    conversation_id: m.conversationId ?? null,
+    headers: rich ? (Array.isArray(m.internetMessageHeaders) ? m.internetMessageHeaders : []) : null,
+    last_verb: rich ? lastVerbOf(m) : null,
+  }]));
+}
+
+// What VIC sent since `since`: conversation + time only (answered check).
+export async function sentSince(since: Date): Promise<{ conversation_id: string | null; sent_at: string | null }[]> {
+  const q = new URLSearchParams({ $filter: `sentDateTime ge ${since.toISOString()}`, $orderby: "sentDateTime desc", $top: "100", $select: "conversationId,sentDateTime" });
+  const rows = await listAll(`/me/mailFolders/sentitems/messages?${q}`, {});
+  return rows.map((m: any) => ({ conversation_id: m.conversationId ?? null, sent_at: m.sentDateTime ?? null }));
+}
+
+// Is this message (still) a draft? null when it no longer exists.
+export async function messageMeta(id: string): Promise<{ isDraft?: boolean } | null> {
+  try {
+    const m = await graph(`/me/messages/${encodeURIComponent(id)}?$select=isDraft`);
+    return { isDraft: m?.isDraft === true };
+  } catch (e) {
+    if (e instanceof GraphError && e.status === 404) return null;
+    throw e;
+  }
+}
+
+// Delete one message by id. Only ever called for Jarvis's own drafts, after
+// messageMeta confirmed it is still a draft (mail-rules-core.ts).
+export async function deleteMessage(id: string): Promise<void> {
+  try {
+    await graph(`/me/messages/${encodeURIComponent(id)}`, { method: "DELETE" });
+  } catch (e) {
+    if (e instanceof GraphError && e.status === 404) return;
+    throw e;
+  }
 }
 
 // Save a reply as a DRAFT in Outlook (Drafts folder). The text goes above

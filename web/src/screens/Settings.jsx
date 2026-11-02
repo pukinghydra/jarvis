@@ -16,6 +16,8 @@ export default function Settings({ session }) {
   const [copied, setCopied] = useState(false);
   const [style, setStyle] = useState({ sv: "", en: "" });
   const [styleMeta, setStyleMeta] = useState({});
+  const [mailRules, setMailRules] = useState("");
+  const [ignore, setIgnore] = useState("");
 
   const load = async () => {
     try {
@@ -28,6 +30,8 @@ export default function Settings({ session }) {
       const map = Object.fromEntries(sets.map((r) => [r.key, r.value]));
       setTravel(Number(map.travel_minutes ?? 30));
       setVips((map.vip_senders ?? []).join(", "));
+      setMailRules(typeof map.mail_rules === "string" ? map.mail_rules : "");
+      setIgnore((map.mail_ignore ?? []).join(", "));
       const ws = map.writing_style ?? {};
       setStyle({ sv: ws.sv ?? "", en: ws.en ?? "" });
       setStyleMeta({ built_at: ws.built_at, samples: ws.samples, edited_at: map.writing_style_edited_at });
@@ -112,6 +116,20 @@ export default function Settings({ session }) {
           <input className="input" value={vips} onChange={(e) => setVips(e.target.value)} onBlur={() => saveSetting("vip_senders", vips.split(",").map((v) => v.trim()).filter(Boolean))} placeholder="richie@…, @skatteverket.se" />
         </label>
       </section>
+
+      {hm?.connected && (
+        <section>
+          <h3>Mail rules</h3>
+          <p className="muted small">Your rules for sorting mail, in your own words. Jarvis follows them for every new email. You can also say "ignorera allt från …" to Jarvis.</p>
+          <textarea className="input" rows={8} value={mailRules} onChange={(e) => setMailRules(e.target.value)} />
+          <label className="field">Always noise (addresses or @domains, comma separated)
+            <input className="input" value={ignore} onChange={(e) => setIgnore(e.target.value)} onBlur={() => saveSetting("mail_ignore", ignore.split(",").map((v) => v.trim().toLowerCase()).filter(Boolean))} placeholder="@nyhetsbrev.se, info@butik.se" />
+          </label>
+          <div className="row">
+            <button className="primary" disabled={!!busy || !mailRules.trim()} onClick={() => saveSetting("mail_rules", mailRules.trim())}>Save rules</button>
+          </div>
+        </section>
+      )}
 
       {status?.claude_api && hm?.connected && (
         <section>
