@@ -2,6 +2,7 @@
 // brief is the weekly review. Pure.
 
 import type { BuyRow } from "./buylist.ts";
+import { mailLine } from "./email-triage-core.ts";
 import { localDateStr, localTimeStr, shortWhen, weekdayName } from "./time.ts";
 
 export type BItem = {
@@ -29,7 +30,15 @@ export type BriefData = {
     ordersToShip: { order_name: string | null; ship_by: string; items: number }[];
   };
   buy: null | { buy: BuyRow[]; skip: BuyRow[]; all: BuyRow[] };
-  emails: { newCount: number; unhandled: number; flagged: { from: string; subject: string }[]; draftsWaiting: number; connected: boolean };
+  emails: {
+    newCount: number; unhandled: number; flagged: { from: string; subject: string }[]; draftsWaiting: number; connected: boolean;
+    // Only when AI triage is on (Claude API key set).
+    triage?: null | {
+      counts: { urgent: number; important: number; drafts: number; noise: number; unsorted: number };
+      important: { from: string; summary: string; urgent: boolean }[];
+      week?: { important: { from: string; summary: string; urgent: boolean }[]; unsent: { from: string; subject: string }[] } | null;
+    };
+  };
   unsorted: number;
   weekAhead: null | { events: BEvent[]; deadlines: BItem[] };
 };
@@ -114,15 +123,30 @@ export function renderBrief(d: BriefData): { markdown: string; push_title: strin
     if (!d.weekAhead.events.length && !d.weekAhead.deadlines.length) L.push("- Nothing booked");
   }
 
+  const tri = d.emails.triage;
+  if (d.weekly && tri?.week) {
+    L.push("", "## Mail this week");
+    if (tri.week.important.length) for (const m of tri.week.important.slice(0, 12)) L.push(`- ${m.urgent ? "🔴" : "🟠"} ${m.from}: ${m.summary}`);
+    else L.push("- Nothing important came in");
+    if (tri.week.unsent.length) {
+      L.push(`- Drafts still not sent (${tri.week.unsent.length}):`);
+      for (const u of tri.week.unsent.slice(0, 8)) L.push(`  - ${u.from}: ${u.subject}`);
+    }
+  }
+
   L.push("", "## Email");
   if (!d.emails.connected) L.push("- Hotmail not connected (Settings → Connect Hotmail)");
-  else {
+  else if (tri) {
+    L.push(`- ${mailLine(tri.counts)}`);
+    for (const m of tri.important.slice(0, 8)) L.push(`- ${m.urgent ? "🔴" : "🟠"} ${m.from}: ${m.summary}`);
+    if (tri.counts.drafts) L.push(`- ✍ ${tri.counts.drafts} reply draft${tri.counts.drafts > 1 ? "s" : ""} in Outlook > Drafts, waiting for you to check and send`);
+  } else {
     L.push(`- ${d.emails.newCount} new since yesterday, ${d.emails.unhandled} not handled${d.emails.draftsWaiting ? `, ${d.emails.draftsWaiting} drafts waiting to be sent` : ""}`);
     for (const f of d.emails.flagged.slice(0, 6)) L.push(`- ⚑ ${f.from}: ${f.subject}`);
   }
   if (d.unsorted) L.push("", `📝 ${d.unsorted} unsorted note${d.unsorted > 1 ? "s" : ""} — say "sort my notes" in Claude`);
 
-  L.push("", "Open Claude and say: check my mail");
+  L.push("", tri ? "Ask Claude about any of it: \"what's important in my mail?\"" : "Open Claude and say: check my mail");
 
   const bits: string[] = [];
   const dueCount = d.dueToday.length + d.pinned.length;
@@ -130,7 +154,10 @@ export function renderBrief(d: BriefData): { markdown: string; push_title: strin
   if (d.events.length) bits.push(`${d.events.length} in calendar`);
   if (d.pinned.length) bits.push(`${d.pinned.map((p) => p.title.replace(/\s*\(Thriftin\)\s*/i, "")).slice(0, 2).join(" + ")} not done`);
   if (d.overdue.length) bits.push(`${d.overdue.length} overdue`);
-  if (d.emails.flagged.length) bits.push(`${d.emails.flagged.length} flagged emails`);
+  if (tri) {
+    if (tri.counts.important) bits.push(`${tri.counts.important} important email${tri.counts.important > 1 ? "s" : ""}${tri.counts.urgent ? ` (${tri.counts.urgent} urgent)` : ""}`);
+    if (tri.counts.drafts) bits.push(`${tri.counts.drafts} drafts ready`);
+  } else if (d.emails.flagged.length) bits.push(`${d.emails.flagged.length} flagged emails`);
   if (d.thriftin?.ordersToShip.length) bits.push(`${d.thriftin.ordersToShip.length} orders to ship`);
   return {
     markdown: L.join("\n"),

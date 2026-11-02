@@ -107,6 +107,18 @@ iCloud links: iPhone Calendar → Calendars → ⓘ next to "Hem" → Public
 Calendar on → Share Link → Copy. Same for "Arbete". Anyone with a link can
 read that calendar, so keep the links secret.
 
+## Email sorting and drafts (only with a Claude API key)
+
+Set `ANTHROPIC_API_KEY` (Edge Function secret, or a row in `app_secrets`) and Jarvis:
+- fetches Hotmail every 15 min, 07:00-23:00 Stockholm, and has Claude sort each new email: urgent / important / normal / noise, a one-line summary, and to-dos (bills -> MONEY with the due date, parcels/returns -> THRIFTIN, bookings -> LIFE);
+- pushes urgent mail at once;
+- for urgent/important mail that needs an answer, writes a reply draft in VIC's own style and saves it in Outlook > Drafts (never sent: no send permission), adds an INBOX item "Send reply to ..." and pushes "Draft ready for ..." with what it says;
+- learns VIC's style from his Sent Items (Settings > "How Jarvis writes as you", editable; relearned Mondays after the brief unless he edited it in the last 7 days; "Relearn my style" forces it). Examples of his own replies go to the service-only table `style_examples`.
+
+Models: `JARVIS_TRIAGE_MODEL` (sorting, effort low) and `JARVIS_MODEL` (drafts and style, effort medium); both default to `claude-opus-5-5`. Without a key nothing changes: 09:15 + 15:00 rule-flag scans as before.
+
+Email text is untrusted: the calls have no tools, answers are schema-checked JSON, and links from emails never reach pushes or items.
+
 ## Checks
 
 ```bash

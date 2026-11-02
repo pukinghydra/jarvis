@@ -139,3 +139,20 @@ export async function createReplyDraft(messageId: string, text: string): Promise
   });
   return { id: d.id, webLink: d.webLink ?? null };
 }
+
+// VIC's own sent mail (Sent Items), newest first, bodies as plain text.
+// Used only to learn how he writes (style.ts). Mail.ReadWrite covers it.
+export async function sentItems(top = 60): Promise<{ subject: string | null; to_address: string | null; sent_at: string | null; body: string }[]> {
+  const q = new URLSearchParams({
+    $orderby: "sentDateTime desc",
+    $top: String(Math.min(100, Math.max(1, top))),
+    $select: "id,subject,toRecipients,sentDateTime,body",
+  });
+  const r = await graph(`/me/mailFolders/sentitems/messages?${q}`, { headers: { Prefer: 'outlook.body-content-type="text"' } });
+  return (r?.value ?? []).map((m: any) => ({
+    subject: m.subject ?? null,
+    to_address: m.toRecipients?.[0]?.emailAddress?.address ?? null,
+    sent_at: m.sentDateTime ?? null,
+    body: String(m.body?.content ?? ""),
+  }));
+}

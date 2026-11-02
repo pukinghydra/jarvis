@@ -9,6 +9,8 @@ import { thriftinFeed } from "./thriftin.ts";
 import { buyList } from "./buylist.ts";
 import { msStatus } from "./graph.ts";
 import { push } from "./push.ts";
+import { hasClaude } from "./claude.ts";
+import { byImportance, mailCounts, sender } from "./email-triage-core.ts";
 import { type BEvent, type BItem, type BriefData, isMonday, renderBrief } from "./brief-core.ts";
 
 const COLS = "id, short_id, lane_id, kind, title, due_at, all_day, proof_type, proof_domains, location, travel_minutes";
@@ -62,6 +64,26 @@ export async function gatherBrief(now: Date, weeklyOverride?: boolean): Promise<
   const { count: unhandled } = await sb.from("emails").select("id", { count: "exact", head: true }).eq("status", "new");
   const { count: drafts } = await sb.from("emails").select("id", { count: "exact", head: true }).eq("status", "drafted");
   const flagged = must(await sb.from("emails").select("from_name, from_address, subject").eq("status", "new").eq("flagged", true).order("received_at", { ascending: false }).limit(6), "flagged") ?? [];
+  let triage: BriefData["emails"]["triage"] = null;
+  if (ms.connected && await hasClaude().catch(() => false)) {
+    const open = must(await sb.from("emails").select("importance, status, summary, from_name, from_address, subject, triaged_at, received_at").in("status", ["new", "drafted"]).order("received_at", { ascending: false }).limit(500), "triaged mail") ?? [];
+    const imp = (m: any) => m.importance === "urgent" || m.importance === "important";
+    const line = (m: any) => ({ from: sender(m), summary: m.summary ?? m.subject ?? "", urgent: m.importance === "urgent" });
+    let week = null;
+    if (weekly) {
+      const since = new Date(now.getTime() - 7 * 86400_000).toISOString();
+      const wk = must(await sb.from("emails").select("importance, summary, subject, from_name, from_address, received_at").in("importance", ["urgent", "important"]).gte("received_at", since).order("received_at", { ascending: false }).limit(40), "week mail") ?? [];
+      week = {
+        important: [...wk].sort(byImportance).map(line),
+        unsent: open.filter((m: any) => m.status === "drafted").map((m: any) => ({ from: sender(m), subject: m.subject ?? "(no subject)" })),
+      };
+    }
+    triage = {
+      counts: mailCounts(open as any[]),
+      important: open.filter((m: any) => m.status === "new" && imp(m)).sort(byImportance).slice(0, 8).map(line),
+      week,
+    };
+  }
   const { count: unsorted } = await sb.from("captures").select("id", { count: "exact", head: true }).eq("status", "unsorted");
 
   return {
@@ -81,6 +103,7 @@ export async function gatherBrief(now: Date, weeklyOverride?: boolean): Promise<
     emails: {
       connected: ms.connected, newCount: newCount ?? 0, unhandled: unhandled ?? 0, draftsWaiting: drafts ?? 0,
       flagged: flagged.map((f: any) => ({ from: f.from_name || f.from_address || "?", subject: f.subject || "(no subject)" })),
+      triage,
     },
     unsorted: unsorted ?? 0,
     weekAhead: weekly ? {

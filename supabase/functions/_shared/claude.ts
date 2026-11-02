@@ -15,6 +15,8 @@ import { config } from "./config.ts";
 
 export const DEFAULT_MODEL = "claude-opus-5-5";
 export const model = async (): Promise<string> => (await config("JARVIS_MODEL")) || DEFAULT_MODEL;
+// Email sorting can run on its own (cheaper) model: JARVIS_TRIAGE_MODEL.
+export const triageModel = async (): Promise<string> => (await config("JARVIS_TRIAGE_MODEL")) || DEFAULT_MODEL;
 // Models that accept `fallbacks: "default"` (Claude API). Others go without.
 const FALLBACK_OK = new Set(["claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-fable-5"]);
 
@@ -35,8 +37,9 @@ export async function askJson<T>(opts: {
   schema: Record<string, unknown>;
   effort: "low" | "medium" | "high";
   maxTokens?: number;
+  model?: string;
 }): Promise<T> {
-  const MODEL = await model();
+  const MODEL = opts.model || await model();
   const params: any = {
     model: MODEL,
     max_tokens: opts.maxTokens ?? 12000,

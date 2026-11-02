@@ -3,6 +3,24 @@ import { api, supabase, must } from "../lib/supabase.js";
 import { addDaysStr, dayLabel, startOfDay, time, todayStr } from "../lib/time.js";
 import ItemCard from "../components/ItemCard.jsx";
 
+// Jarvis's own email sorting (only when a Claude API key is set): counts like
+// the brief's "N important (M urgent) · K drafts ready · X noise".
+const RANK = { urgent: 0, important: 1, normal: 2, noise: 3 };
+function mailSummary(rows) {
+  const on = rows.some((r) => r.triaged_at);
+  const fresh = rows.filter((r) => r.status === "new");
+  const important = fresh.filter((r) => r.triaged_at && (r.importance === "urgent" || r.importance === "important"));
+  return {
+    on,
+    urgent: important.filter((r) => r.importance === "urgent").length,
+    important: important.length,
+    drafts: rows.filter((r) => r.status === "drafted").length,
+    noise: fresh.filter((r) => r.triaged_at && r.importance === "noise").length,
+    unsorted: fresh.filter((r) => !r.triaged_at).length,
+    list: [...important].sort((a, b) => RANK[a.importance] - RANK[b.importance]).slice(0, 6),
+  };
+}
+
 export default function Today({ lanes, refreshKey, onChange }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
@@ -16,7 +34,7 @@ export default function Today({ lanes, refreshKey, onChange }) {
       const [items, cal, emails, notes, stats] = await Promise.all([
         supabase.from("items").select("*").eq("status", "open").order("due_at", { nullsFirst: false }).limit(500).then(must),
         supabase.from("calendar_events").select("*").gte("start_at", new Date(S).toISOString()).lt("start_at", new Date(W).toISOString()).order("start_at").then(must),
-        supabase.from("emails").select("id, flagged", { count: "exact" }).eq("status", "new").then(must),
+        supabase.from("emails").select("id, flagged, status, importance, summary, from_name, from_address, triaged_at, received_at").in("status", ["new", "drafted"]).order("received_at", { ascending: false }).limit(500).then(must),
         supabase.from("captures").select("id").eq("status", "unsorted").then(must),
         api("stats").catch(() => null),
       ]);
@@ -32,7 +50,10 @@ export default function Today({ lanes, refreshKey, onChange }) {
         week: items.filter((i) => i.proof_type === "none" && i.lane_id !== inbox && t(i.due_at) >= E && t(i.due_at) < W),
         calToday: cal.filter((e) => t(e.start_at) < E),
         calWeek: cal.filter((e) => t(e.start_at) >= E),
-        emails: emails.length, flagged: emails.filter((e) => e.flagged).length, unsorted: notes.length,
+        emails: emails.filter((e) => e.status === "new").length,
+        flagged: emails.filter((e) => e.status === "new" && e.flagged).length,
+        mail: mailSummary(emails),
+        unsorted: notes.length,
       });
     } catch (e) { setErr(e.message); }
   };
@@ -59,9 +80,21 @@ export default function Today({ lanes, refreshKey, onChange }) {
         <div><b>{s?.done_this_week ?? "–"}</b><span>done</span></div>
       </div>
 
-      {(data.emails > 0 || data.unsorted > 0) && (
+      {(data.emails > 0 || data.unsorted > 0 || data.mail.drafts > 0) && (
         <div className="banner">
-          {data.emails > 0 && <div>✉ {data.emails} emails waiting{data.flagged ? ` (${data.flagged} flagged)` : ""}. In Claude: "check my mail".</div>}
+          {data.mail.on ? (
+            <div>
+              <div>✉ {data.mail.important} important{data.mail.urgent ? ` (${data.mail.urgent} urgent)` : ""} · {data.mail.drafts} draft{data.mail.drafts === 1 ? "" : "s"} ready · {data.mail.noise} noise{data.mail.unsorted ? ` · ${data.mail.unsorted} still to sort` : ""}</div>
+              {data.mail.list.map((m) => (
+                <div key={m.id} className="small" style={{ marginTop: 4 }}>
+                  {m.importance === "urgent" ? "🔴" : "🟠"} <b>{m.from_name || m.from_address || "?"}</b>: {m.summary}
+                </div>
+              ))}
+              {data.mail.drafts > 0 && <div className="muted small" style={{ marginTop: 4 }}>Drafts are in Outlook → Drafts. Check and send them yourself.</div>}
+            </div>
+          ) : (
+            data.emails > 0 && <div>✉ {data.emails} emails waiting{data.flagged ? ` (${data.flagged} flagged)` : ""}. In Claude: "check my mail".</div>
+          )}
           {data.unsorted > 0 && <div>📝 {data.unsorted} unsorted notes. In Claude: "sort my notes".</div>}
         </div>
       )}

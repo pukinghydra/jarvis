@@ -14,6 +14,8 @@ export default function Settings({ session }) {
   const [travel, setTravel] = useState(30);
   const [vips, setVips] = useState("");
   const [copied, setCopied] = useState(false);
+  const [style, setStyle] = useState({ sv: "", en: "" });
+  const [styleMeta, setStyleMeta] = useState({});
 
   const load = async () => {
     try {
@@ -26,6 +28,9 @@ export default function Settings({ session }) {
       const map = Object.fromEntries(sets.map((r) => [r.key, r.value]));
       setTravel(Number(map.travel_minutes ?? 30));
       setVips((map.vip_senders ?? []).join(", "));
+      const ws = map.writing_style ?? {};
+      setStyle({ sv: ws.sv ?? "", en: ws.en ?? "" });
+      setStyleMeta({ built_at: ws.built_at, samples: ws.samples, edited_at: map.writing_style_edited_at });
     } catch (e) { setErr(e.message); }
     setPush(await pushState().catch(() => "unsupported"));
   };
@@ -41,6 +46,25 @@ export default function Settings({ session }) {
     try { const r = await fn(); if (typeof r === "string") setMsg(r); await load(); } catch (e) { setErr(e.message); } finally { setBusy(""); }
   };
   const saveSetting = (key, value) => act(key, async () => { must(await supabase.from("settings").upsert({ key, value, updated_at: new Date().toISOString() })); return "Saved"; });
+
+  // VIC's edits win: the weekly relearn leaves an edited guide alone for 7 days.
+  const saveStyle = () => act("style", async () => {
+    const now = new Date().toISOString();
+    const { data } = await supabase.from("settings").select("value").eq("key", "writing_style").maybeSingle();
+    const value = { ...(data?.value ?? {}), sv: style.sv.trim() || undefined, en: style.en.trim() || undefined };
+    must(await supabase.from("settings").upsert([
+      { key: "writing_style", value, updated_at: now },
+      { key: "writing_style_edited_at", value: now, updated_at: now },
+    ]));
+    return "Saved. Jarvis writes like this from now on.";
+  });
+  const relearn = () => {
+    if (styleMeta.edited_at && !window.confirm("Relearning replaces your own edits to the style. Continue?")) return;
+    act("relearn", async () => {
+      const r = await api("style_relearn");
+      return r.skipped ?? `Learned from ${r.samples} sent emails (${(r.languages ?? []).join(" + ")}), ${r.examples} examples kept.`;
+    });
+  };
 
   const copyMcp = async () => {
     try { await navigator.clipboard.writeText(owner.mcp_url); setCopied(true); setTimeout(() => setCopied(false), 2500); }
@@ -73,13 +97,40 @@ export default function Settings({ session }) {
         <p className="muted small">{hm?.connected ? `Connected: ${hm.account ?? "yes"}` : status?.hotmail_ready ? "Not connected" : "Waiting for MS_CLIENT_ID / MS_CLIENT_SECRET in the function secrets"}</p>
         <div className="row">
           {!hm?.connected && <button className="primary" disabled={!!busy || !status?.hotmail_ready} onClick={() => act("ms", async () => { const { url } = await api("ms_start"); location.href = url; })}>Connect Hotmail</button>}
-          {hm?.connected && <button className="ghost" disabled={!!busy} onClick={() => act("scan", async () => { const r = await api("scan_now"); return r.skipped ?? `Fetched ${r.fetched}, new ${r.new}, flagged ${r.flagged}`; })}>Check mail now</button>}
+          {hm?.connected && <button className="ghost" disabled={!!busy} onClick={() => act("scan", async () => {
+            const r = await api("scan_now");
+            if (r.skipped) return r.skipped;
+            const t = r.triage;
+            if (!t) return `Fetched ${r.fetched}, new ${r.new}, flagged ${r.flagged}`;
+            if (t.running) return `Fetched ${r.fetched}, new ${r.new}. Sorting with Claude — alerts will follow.`;
+            if (t.error || t.skipped) return `Fetched ${r.fetched}, new ${r.new}. Sorting: ${t.error ?? t.skipped}`;
+            return `Fetched ${r.fetched}, new ${r.new}. Sorted ${t.triaged}: ${t.urgent} urgent, ${t.important} important, ${t.noise} noise · ${t.drafts} drafts · ${t.items} to-dos`;
+          })}>{busy === "scan" ? "Checking…" : "Check mail now"}</button>}
           {hm?.connected && <button className="ghost danger" disabled={!!busy} onClick={() => window.confirm("Disconnect Hotmail?") && act("msd", async () => { await api("ms_disconnect"); return "Disconnected"; })}>Disconnect</button>}
         </div>
         <label className="field">VIP senders (always flagged) — addresses or @domains, comma separated
           <input className="input" value={vips} onChange={(e) => setVips(e.target.value)} onBlur={() => saveSetting("vip_senders", vips.split(",").map((v) => v.trim()).filter(Boolean))} placeholder="richie@…, @skatteverket.se" />
         </label>
       </section>
+
+      {status?.claude_api && hm?.connected && (
+        <section>
+          <h3>How Jarvis writes as you</h3>
+          <p className="muted small">
+            Learned from your Sent mail{styleMeta.built_at ? ` (${String(styleMeta.built_at).slice(0, 10)}, ${styleMeta.samples ?? "?"} emails)` : " — not learned yet"}. Edit freely: your version is kept, and the Monday relearn skips it for 7 days.
+          </p>
+          <label className="field">Svenska
+            <textarea className="input" rows={8} value={style.sv} onChange={(e) => setStyle({ ...style, sv: e.target.value })} placeholder="Tryck på Relearn my style" />
+          </label>
+          <label className="field">English
+            <textarea className="input" rows={8} value={style.en} onChange={(e) => setStyle({ ...style, en: e.target.value })} placeholder="Tap Relearn my style" />
+          </label>
+          <div className="row">
+            <button className="primary" disabled={!!busy} onClick={saveStyle}>Save</button>
+            <button className="ghost" disabled={!!busy} onClick={relearn}>{busy === "relearn" ? "Learning…" : "Relearn my style"}</button>
+          </div>
+        </section>
+      )}
 
       <section>
         <h3>Voice</h3>
@@ -100,6 +151,7 @@ export default function Settings({ session }) {
           <li>Calendars linked: {status?.calendars ?? "–"}</li>
           <li>THRIFTIN data: {status ? (status.thriftin ? "connected" : "not connected") : "–"}</li>
           <li>Auto-sort notes (Claude API): {status ? (status.claude_api ? "on" : "off — sort them in the Claude app") : "–"}</li>
+          <li>Email sorting + drafts (Claude API): {status ? (status.claude_api ? "on — every 15 min, 07–23" : "off — rule flags only") : "–"}</li>
         </ul>
       </section>
 

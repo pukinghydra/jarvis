@@ -59,7 +59,7 @@ export async function resolveEmail(ref: string): Promise<any> {
 
 // Save a reply draft in Outlook to the ORIGINAL sender only (createReply has
 // no recipient field), plus an INBOX item to send it, reminding in 2 hours.
-export async function draftReply(ref: string, body: string, language: string | null) {
+export async function draftReply(ref: string, body: string, language: string | null, opts: { source?: "mcp" | "email"; summary?: string } = {}) {
   const email = await resolveEmail(ref);
   const text = String(body ?? "").trim();
   if (text.length < 2) throw new HttpError(422, "The reply body is empty");
@@ -76,9 +76,9 @@ export async function draftReply(ref: string, body: string, language: string | n
   const remindAt = new Date(Date.now() + 2 * 3600_000).toISOString();
   const item = must(
     await sb.from("items").insert({
-      lane_id: lane?.id ?? null, kind: "task", source: "mcp", email_id: email.id,
+      lane_id: lane?.id ?? null, kind: "task", source: opts.source ?? "mcp", email_id: email.id,
       title: `Send reply to ${sender}: ${email.subject ?? "(no subject)"}`.slice(0, 200),
-      notes: `Draft${language ? ` (${language})` : ""} saved in Outlook > Drafts:\n\n${text}`.slice(0, 4000),
+      notes: `${opts.summary ? `${opts.summary}\n\n` : ""}Draft${language ? ` (${language})` : ""} saved in Outlook > Drafts:\n\n${text}`.slice(0, 4000),
       remind_at: remindAt,
     }).select("id, short_id").single(),
     "add send-reply item",

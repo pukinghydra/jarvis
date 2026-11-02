@@ -6,8 +6,11 @@
 // Every minute:   roll missed repeating items, send due reminders,
 //                 leave-now alerts, birthdays (09:00-09:59)
 // Every 10 min:   refresh the calendars
-// 09:15 + 15:00:  fetch new Hotmail (rule-based flags, push if flagged)
+// Hotmail:        with a Claude API key: every 15 min 07:00-23:00, then AI
+//                 triage (urgent pushes, drafts in VIC's style). Without a
+//                 key: 09:15 + 15:00, rule-based flags, push if flagged.
 // 09:30:          build + push the brief (Monday = weekly review)
+// Monday 09:45:   relearn VIC's writing style (key only; keeps his edits)
 // 03:00:          clean old alert keys
 
 import { errorText, json } from "../_shared/http.ts";
@@ -18,6 +21,11 @@ import { rollPast } from "../_shared/items.ts";
 import { sendBirthdayAlerts, sendLeaveAlerts, sendReminders } from "../_shared/alerts.ts";
 import { syncCalendar } from "../_shared/calendar.ts";
 import { scanEmails } from "../_shared/email.ts";
+import { triageNewEmails } from "../_shared/email-triage.ts";
+import { mailPlan } from "../_shared/email-triage-core.ts";
+import { rebuildStyle } from "../_shared/style.ts";
+import { hasClaude } from "../_shared/claude.ts";
+import { isMonday } from "../_shared/brief-core.ts";
 import { runBrief } from "../_shared/brief.ts";
 import { inLocalWindow, localDateStr, localParts, pad } from "../_shared/time.ts";
 
@@ -67,10 +75,16 @@ Deno.serve(async (req) => {
   const jobs: Promise<unknown>[] = [];
   const bucket = `${today}T${pad(p.h)}:${Math.floor(p.mi / 10)}`;
   if (await claimOnce(`cal:${bucket}`).catch(() => false)) jobs.push(step(report, "calendar", () => syncCalendar(now)));
-  for (const slot of ["09:15", "15:00"]) {
-    if (inLocalWindow(now, slot, 30) && await claimOnce(`scan:${today}:${slot}`).catch(() => false)) {
-      jobs.push(step(report, `email ${slot}`, () => scanEmails(now, { notify: true })));
-    }
+  const triageOn = await hasClaude().catch(() => false);
+  const mail = mailPlan(now, triageOn, (slot, minutes) => inLocalWindow(now, slot, minutes));
+  if (mail && await claimOnce(mail.key).catch(() => false)) {
+    jobs.push(step(report, mail.key, async () => {
+      const scan = await scanEmails(now, { notify: mail.notifyRules });
+      return mail.triage ? { scan, triage: await triageNewEmails(now, { notify: true }) } : scan;
+    }));
+  }
+  if (triageOn && isMonday(today) && inLocalWindow(now, "09:45", 120) && await claimOnce(`style:${today}`).catch(() => false)) {
+    jobs.push(step(report, "style", () => rebuildStyle(now)));
   }
   if (inLocalWindow(now, "09:30", 150) && await claimOnce(`brief:${today}`).catch(() => false)) {
     jobs.push(step(report, "brief", () => briefWithRetry(now, today)));

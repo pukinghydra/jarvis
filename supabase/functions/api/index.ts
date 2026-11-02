@@ -7,7 +7,8 @@
 //   complete {id, proof_url?, proof_path?}   skip {id, reason}
 //   stats    status    vapid    push_test
 //   ms_start (-> Microsoft sign-in URL)    ms_disconnect
-//   scan_now    brief_now    calendar_sync    buy_list
+//   scan_now (fetch + AI triage when a key is set)    style_relearn
+//   brief_now    calendar_sync    buy_list
 
 import { CORS, errorText, json } from "../_shared/http.ts";
 import { SUPABASE_URL } from "../_shared/env.ts";
@@ -18,12 +19,17 @@ import { push } from "../_shared/push.ts";
 import { msDisconnect, msStatus, redirectUri } from "../_shared/graph.ts";
 import { signState } from "../_shared/crypto.ts";
 import { scanEmails } from "../_shared/email.ts";
+import { triageNewEmails } from "../_shared/email-triage.ts";
+import { rebuildStyle } from "../_shared/style.ts";
 import { runBrief } from "../_shared/brief.ts";
 import { icsUrls, syncCalendar } from "../_shared/calendar.ts";
 import { thriftinFeed } from "../_shared/thriftin.ts";
 import { buyList } from "../_shared/buylist.ts";
 import { hasClaude } from "../_shared/claude.ts";
 import { appSecret, vapidKeys } from "../_shared/secrets.ts";
+
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
+const waitUntil = (p: Promise<unknown>) => (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil ? EdgeRuntime.waitUntil(p) : undefined);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -64,8 +70,18 @@ Deno.serve(async (req) => {
       case "ms_disconnect":
         await msDisconnect();
         return json({ ok: true });
-      case "scan_now":
-        return json(await scanEmails(now, { notify: false }));
+      case "scan_now": {
+        const scan: any = await scanEmails(now, { notify: false });
+        if (scan.skipped || !(await hasClaude())) return json(scan);
+        // Sorting can take a while: answer after 45 s at most, the rest
+        // carries on in the background (pushes still arrive).
+        const triage = triageNewEmails(now, { notify: true }).catch((e) => ({ error: errorText(e) }));
+        const first = await Promise.race([triage, new Promise((r) => setTimeout(() => r(null), 45_000))]);
+        if (!first) waitUntil(triage);
+        return json({ ...scan, triage: first ?? { running: true } });
+      }
+      case "style_relearn":
+        return json(await rebuildStyle(now, { force: true }));
       case "brief_now":
         return json(await runBrief(now, { push: !!b.push }));
       case "calendar_sync":
