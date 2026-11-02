@@ -52,15 +52,19 @@ async function memories(): Promise<string> {
   return memoryBlock(rows as any[]);
 }
 
-// Request parameters. `safe` drops the newer request features (thinking
-// block binding, top-level cache breakpoint) if the API ever rejects them.
+// Request parameters, with two fallbacks if the API rejects something:
+// `safe` drops the newer features (thinking block binding, top-level cache
+// breakpoint); `noWeb` also drops web search/fetch (e.g. switched off for
+// the organisation in the Claude Console). Sticky per function instance.
 let safe = false;
+let noWeb = false;
 function params(m: string, effort: string, messages: any[]) {
+  const tools = apiTools();
   const p: any = {
     model: m,
     max_tokens: CHAT_MAX_TOKENS,
     system: [{ type: "text", text: CHAT_SYSTEM, cache_control: { type: "ephemeral" } }],
-    tools: apiTools(),
+    tools: noWeb ? tools.filter((t) => !t.type) : tools,
     tool_choice: { type: "auto" },
     output_config: { effort },
     messages,
@@ -113,15 +117,14 @@ export async function chatSay(text: string, lang: string | null, source: ItemSou
     let calls = 0;
     const create = async (messages: any[]) => {
       calls++;
-      try {
-        return await client.beta.messages.create(params(m, effort, messages) as any);
-      } catch (e) {
-        if (!safe && e instanceof Anthropic.BadRequestError) {
-          console.error("chat: request rejected, retrying with plain parameters:", e.message);
-          safe = true;
+      for (;;) {
+        try {
           return await client.beta.messages.create(params(m, effort, messages) as any);
+        } catch (e) {
+          if (!(e instanceof Anthropic.BadRequestError) || (safe && noWeb)) throw e;
+          if (!safe) { safe = true; console.error("chat: request rejected, retrying with plain parameters:", e.message); }
+          else { noWeb = true; console.error("chat: still rejected, retrying without web search/fetch:", e.message); }
         }
-        throw e;
       }
     };
     try {
