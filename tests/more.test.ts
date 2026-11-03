@@ -3,6 +3,8 @@ import { parseIcs, icsName } from "../supabase/functions/_shared/ics.ts";
 import { handleBody, handleRpc, type ToolDef } from "../supabase/functions/_shared/mcp-core.ts";
 import { renderBrief, type BriefData } from "../supabase/functions/_shared/brief-core.ts";
 import { localTimeStr, localDateStr } from "../supabase/functions/_shared/time.ts";
+import { formatSchedule, formatShiftChange } from "../supabase/functions/_shared/thriftin-core.ts";
+import { TOOL_DEFS } from "../supabase/functions/_shared/tool-defs.ts";
 
 const { test, run } = suite();
 export { run };
@@ -151,4 +153,30 @@ test("brief: weekly review has the parts and the Claude line", () => {
 test("brief: daily without THRIFTIN or Hotmail still renders", () => {
   const r = renderBrief({ ...base, weekly: false, thriftin: null, buy: null, emails: { connected: false, newCount: 0, unhandled: 0, draftsWaiting: 0, flagged: [] }, weekAhead: null });
   ok(r.markdown.startsWith("# Brief · Monday 2 Nov")); ok(r.markdown.includes("Hotmail not connected")); ok(!r.markdown.includes("THRIFTIN\n"));
+});
+
+// THRIFTIN schedule tools: formatting and the confirm-first rule in the descriptions.
+test("thriftin: schedule groups shifts per day with notes", () => {
+  const out = formatSchedule({
+    from: "2026-11-03", to: "2026-11-09",
+    shifts: [{ date: "2026-11-04", user_name: "Richie", status: "scheduled", hours: 6 }, { date: "2026-11-04", user_name: "Vic", status: "off", hours: null }],
+    day_notes: [{ date: "2026-11-05", note: "Leverans 10:00", split_day: true }],
+    staff: [{ name: "Richie" }, { name: "Vic" }],
+  });
+  ok(out.includes("2026-11-04: Richie scheduled 6 h, Vic off"), out);
+  ok(out.includes("2026-11-05: no shifts · note: Leverans 10:00 (split day)"), out);
+  ok(out.includes("Active staff: Richie, Vic"), out);
+  ok(formatSchedule({ from: "a", to: "b", shifts: [], day_notes: [], staff: [] }).includes("No shifts or notes"));
+});
+test("thriftin: shift change wording", () => {
+  eq(formatShiftChange({ change: "created", before: null, shift: { date: "2026-11-08", user_name: "Richie", status: "scheduled", hours: 6 } }), "Added: 2026-11-08 Richie: scheduled 6 h.");
+  eq(formatShiftChange({ change: "updated", before: { date: "2026-11-08", user_name: "Richie", status: "scheduled", hours: 6 }, shift: { date: "2026-11-08", user_name: "Richie", status: "off", hours: null } }), "Changed: 2026-11-08 Richie: off (was 2026-11-08 Richie: scheduled 6 h).");
+  eq(formatShiftChange({ removed: 0, person: "Vic", date: "2026-11-08" }), "Vic had no shift on 2026-11-08; nothing removed.");
+});
+test("thriftin: write tools tell Claude to confirm first and never message staff", () => {
+  for (const n of ["thriftin_set_shift", "thriftin_remove_shift", "thriftin_day_note"]) {
+    const d = TOOL_DEFS.find((x) => x.name === n);
+    ok(d && /confirm|wait for his yes/i.test(d.description), `${n} confirm`);
+  }
+  for (const n of ["thriftin_set_shift", "thriftin_remove_shift"]) ok(/never message/i.test(TOOL_DEFS.find((x) => x.name === n)!.description), `${n} no messaging`);
 });

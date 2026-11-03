@@ -14,7 +14,8 @@ import { addDays, localDateStr, nowForPrompt, shortWhen, startOfLocalDay, localT
 import { draftReply, markEmailHandled, resolveEmail, scanEmails } from "./email.ts";
 import { msStatus } from "./graph.ts";
 import { runBrief } from "./brief.ts";
-import { thriftinFeed } from "./thriftin.ts";
+import { thriftinAction, thriftinFeed } from "./thriftin.ts";
+import { formatSchedule, formatShiftChange } from "./thriftin-core.ts";
 import { buyList } from "./buylist.ts";
 import { styleFor } from "./style.ts";
 import { byImportance } from "./email-triage-core.ts";
@@ -283,6 +284,14 @@ function handlers(source: ItemSource): Record<ToolName, Handler> {
         "BUY MORE:", ...b.buy.map((r, n) => `${n + 1}. ${r.category} — ${r.why}`),
         "", "SKIP FOR NOW:", ...b.skip.map((r) => `- ${r.category} — ${r.why}`),
       ].join("\n");
+    },
+    thriftin_schedule: async (a) => formatSchedule(await thriftinAction("schedule", { from: a.from, to: a.to })),
+    thriftin_set_shift: async (a) => formatShiftChange(await thriftinAction("shift_set", { person: a.person, date: a.date, status: a.status, hours: a.hours })),
+    thriftin_remove_shift: async (a) => formatShiftChange(await thriftinAction("shift_remove", { person: a.person, date: a.date })),
+    thriftin_day_note: async (a) => {
+      const r = await thriftinAction("day_note_set", { date: a.date, note: a.note, split_day: a.split_day });
+      return r.change === "cleared" ? `Cleared the note on ${r.date}.` : r.change === "nothing" ? `Nothing to change on ${r.date}.`
+        : `${r.change === "created" ? "Added" : "Updated"} note on ${r.date}: ${r.note || "-"}${r.split_day ? " (split day)" : ""}.`;
     },
     remember: async (a) => {
       const fact = cleanFact(a.fact);

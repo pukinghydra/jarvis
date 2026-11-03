@@ -25,3 +25,20 @@ export async function thriftinFeed(): Promise<ThriftinFeed | null> {
     return null;
   }
 }
+
+// The THRIFTIN schedule (shifts + day notes) through the same feed. Staff see
+// this schedule, so Jarvis confirms every change with VIC before writing.
+// Throws a readable error (THRIFTIN's own message for bad input).
+export async function thriftinAction(action: string, args: Record<string, unknown>): Promise<any> {
+  const [url, token] = await Promise.all([config("THRIFTIN_FEED_URL"), config("THRIFTIN_FEED_TOKEN")]);
+  if (!url || !token) throw new Error("THRIFTIN is not connected (THRIFTIN_FEED_URL/TOKEN not set).");
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "x-jarvis-token": token, "Content-Type": "application/json" },
+    body: JSON.stringify({ ...args, action }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  const body: any = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`THRIFTIN: ${body?.error ?? `answered ${res.status}`}`);
+  return body;
+}

@@ -166,6 +166,53 @@ export const TOOL_DEFS = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "thriftin_schedule",
+    description: "THRIFTIN's staff schedule (the Schedule tab in the shop app): shifts per person and day (scheduled / worked / off, hours) and day notes, plus the list of active staff. Default range: today and the next 13 days; max 62 days.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        from: { type: "string", description: "YYYY-MM-DD (default today)." },
+        to: { type: "string", description: "YYYY-MM-DD (default from + 13 days)." },
+      },
+    },
+  },
+  {
+    name: "thriftin_set_shift",
+    description: "Add or change ONE shift on THRIFTIN's staff schedule (one shift per person per day). Staff see this schedule: BEFORE calling, tell VIC the exact change in one line and wait for his yes (e.g. \"Lägger in Richie lör 8/11, 6 h — ok?\"). Never message or notify staff. Hours default to the person's usual hours for that weekday.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        person: { type: "string", description: "Staff first name as on the schedule (thriftin_schedule lists them)." },
+        date: { type: "string", description: "YYYY-MM-DD." },
+        status: { type: "string", enum: ["scheduled", "worked", "off"], description: "Default scheduled. worked needs hours." },
+        hours: { type: "number", description: "0–24, quarter hours. Omit for the person's usual hours." },
+      },
+      required: ["person", "date"],
+    },
+  },
+  {
+    name: "thriftin_remove_shift",
+    description: "Remove a person's shift on one day from THRIFTIN's schedule. Staff see this schedule: confirm with VIC in one line first. Never message staff.",
+    inputSchema: {
+      type: "object",
+      properties: { person: { type: "string" }, date: { type: "string", description: "YYYY-MM-DD." } },
+      required: ["person", "date"],
+    },
+  },
+  {
+    name: "thriftin_day_note",
+    description: "Set or clear the note on a day in THRIFTIN's schedule (e.g. \"Leverans 10:00\", \"Stängt\"), and/or mark it a split day. Staff see it: confirm the text with VIC first. Empty note + split_day false clears the day.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        date: { type: "string", description: "YYYY-MM-DD." },
+        note: { type: "string" },
+        split_day: { type: "boolean" },
+      },
+      required: ["date"],
+    },
+  },
+  {
     name: "remember",
     description: "Save a durable fact about VIC for later conversations: people and who they are, preferences, recurring obligations, Thriftin facts, how he wants things done. Save it when he states it, without asking. Not for one-off tasks (use add). One fact per call, written as a short sentence.",
     inputSchema: {
