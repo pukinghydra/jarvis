@@ -138,3 +138,7 @@ h3.amber { color: var(--amber); }
 .review-buttons { display: flex; gap: 10px; }
 .review-buttons .big { flex: 1; min-height: 56px; font-size: 18px; }
 .retry { margin-left: 8px; }
+
+/* iPhone: no live level, so a calm pulse shows it's recording */
+.meter-fill.pulse { width: 100%; animation: recpulse 1.2s ease-in-out infinite; }
+@keyframes recpulse { 0%, 100% { opacity: .25; } 50% { opacity: .9; } }

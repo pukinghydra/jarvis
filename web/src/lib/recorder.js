@@ -44,9 +44,12 @@ export async function startRecording({ onTick, onLevel, onLimit } = {}) {
   const chunks = [];
   rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
 
-  // Level meter: RMS of the mic signal, ~20 times a second.
+  // Level meter: RMS of the mic signal, ~20 times a second. Not on iPhone/
+  // iPad: there, running Web Audio on the same mic can make the recording
+  // silent or empty, so the screen shows a pulsing dot instead.
   let ctx = null, raf = 0;
-  try {
+  const ios = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (!ios) try {
     const AC = window.AudioContext || window.webkitAudioContext;
     ctx = new AC();
     const src = ctx.createMediaStreamSource(stream);
@@ -86,14 +89,18 @@ export async function startRecording({ onTick, onLevel, onLimit } = {}) {
     // The stream stays open for the next recording (see micStream).
   };
 
-  rec.start(1000); // a chunk every second, so nothing is lost if iOS hiccups
+  // No timeslice: Safari then hands over one complete file when stopped
+  // (chunked recording could arrive empty or unreadable).
+  rec.start();
   return {
     mime: rec.mimeType || mime || "audio/mp4",
     async stop() {
       if (rec.state !== "inactive") { try { rec.requestData?.(); } catch { /* ignore */ } rec.stop(); }
       await finished;
       cleanup();
-      return new Blob(chunks, { type: (rec.mimeType || mime || "audio/mp4").split(";")[0] });
+      const blob = new Blob(chunks, { type: (rec.mimeType || mime || "audio/mp4").split(";")[0] });
+      if (!blob.size) { releaseMic(); throw new Error(`The recording came out empty (${rec.mimeType || mime || "no type"}). Tap the mic and try again.`); }
+      return blob;
     },
     cancel() {
       try { if (rec.state !== "inactive") rec.stop(); } catch { /* stopped */ }

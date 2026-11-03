@@ -90,7 +90,8 @@ export default function Talk({ onSaved }) {
     recRef.current = null;
     if (!rec) return;
     setMode("transcribing");
-    const blob = await rec.stop();
+    let blob;
+    try { blob = await rec.stop(); } catch (e) { setErr(e.message); setMode("idle"); return; }
     blobRef.current = blob;
     runTranscribe(blob);
   };
@@ -181,7 +182,7 @@ export default function Talk({ onSaved }) {
             </button>
             {mode === "recording" && (
               <div className="rec-row">
-                <div className="meter" aria-hidden="true"><div className="meter-fill" style={{ width: `${Math.round(level * 100)}%` }} /></div>
+                <div className="meter" aria-hidden="true"><div className={`meter-fill${level ? "" : " pulse"}`} style={level ? { width: `${Math.round(level * 100)}%` } : undefined} /></div>
                 <button className="ghost small" onClick={cancelRec}>{t("Avbryt", "Cancel")}</button>
               </div>
             )}

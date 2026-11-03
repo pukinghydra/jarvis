@@ -76,6 +76,7 @@ export async function handleTranscribe(
   if (!type.toLowerCase().startsWith("multipart/form-data")) {
     const b = await req.json().catch(() => ({}));
     if ((b as any)?.check) return { status: 200, body: { provider: p?.name ?? null, model: p?.model ?? null } };
+    deps.log?.("transcribe rejected: not multipart", type);
     return { status: 400, body: { error: "Send the recording as multipart form data (field \"audio\")." } };
   }
   if (!p) return { status: 400, body: { error: NO_PROVIDER, code: "no_stt" } };
@@ -83,10 +84,13 @@ export async function handleTranscribe(
   if (len > MAX_AUDIO_BYTES + 1024 * 1024) return { status: 413, body: { error: "The recording is too big (max 25 MB): keep it under 10 minutes." } };
   const form = await req.formData();
   const audio = form.get("audio");
-  if (!(audio instanceof Blob)) return { status: 400, body: { error: "No audio in the upload." } };
+  if (!(audio instanceof Blob)) { deps.log?.("transcribe rejected: no audio field", typeof audio); return { status: 400, body: { error: "No audio in the upload." } }; }
   const audioType = audio.type || String(form.get("type") ?? "");
   const bad = checkAudio(audio.size, audioType);
-  if (bad) return { status: audio.size > MAX_AUDIO_BYTES ? 413 : 400, body: { error: bad } };
+  if (bad) {
+    deps.log?.("transcribe rejected:", JSON.stringify({ size: audio.size, type: audio.type, formType: form.get("type"), reason: bad }));
+    return { status: audio.size > MAX_AUDIO_BYTES ? 413 : 400, body: { error: bad } };
+  }
 
   const r = sttRequest(p, audio, audioType);
   const res = await deps.fetchFn(r.url, { method: "POST", headers: r.headers, body: r.form, signal: AbortSignal.timeout(120_000) });
