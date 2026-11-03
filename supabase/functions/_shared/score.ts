@@ -1,4 +1,5 @@
-// Streak and weekly score for the proof habits (posting etc.). Pure.
+// Streak and weekly score for daily habits (repeating items like Post on
+// TikTok). Rows are logged with proof_type 'habit' (or an old proof type). Pure.
 //
 // Score = done / (done + skipped + missed) over proof items in a date range.
 // Streak = days in a row where every proof item that day was done. Today

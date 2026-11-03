@@ -16,8 +16,6 @@ export const ITEM_SCHEMA = {
     due_at: { type: "string", description: "When it is due/happens. 'YYYY-MM-DD' = all day, or ISO time with Stockholm offset, e.g. 2026-11-06T14:00:00+01:00 (winter +01:00, summer +02:00)." },
     remind_at: { type: "string", description: "When to push a phone reminder, ISO with offset (or YYYY-MM-DD = 09:00). Omit for no reminder." },
     recurrence: { type: "string", enum: ["daily", "weekdays", "weekly", "monthly", "yearly"], description: "Only if it repeats. Needs due_at (the first time)." },
-    proof_type: { type: "string", enum: ["none", "link", "photo"], description: "link = can only be closed with a URL (use for posting on TikTok/Instagram). photo = closed in the Jarvis app with a photo. Default none." },
-    proof_domains: { type: "array", items: { type: "string" }, description: "For proof_type link: allowed sites, e.g. [\"tiktok.com\"]. Inferred from the title if omitted." },
     location: { type: "string", description: "Place, for events (enables a leave-now alert)." },
     travel_minutes: { type: "integer", description: "Minutes to get there (default from settings, usually 30)." },
     remind_again_minutes: { type: "integer", description: "Remind again this many minutes after remind_at if it is still not done (5–720), e.g. 60 = a second push an hour later. Needs remind_at." },
@@ -28,7 +26,7 @@ export const ITEM_SCHEMA = {
 export const TOOL_DEFS = [
   {
     name: "today",
-    description: "Start here. Current Stockholm date/time and weekday (use it to resolve 'imorgon', 'på fredag', 'next week'), streak and weekly score, must-do proof items, today's calendar and tasks, overdue items, and how many emails and unsorted notes are waiting.",
+    description: "Start here. Current Stockholm date/time and weekday (use it to resolve 'imorgon', 'på fredag', 'next week'), streak and weekly score, today's calendar and tasks, overdue items, and how many emails and unsorted notes are waiting.",
     inputSchema: { type: "object", properties: {} },
   },
   {
@@ -43,12 +41,12 @@ export const TOOL_DEFS = [
   },
   {
     name: "add",
-    description: "Save items VIC asked for (you do the understanding). One item per separate thing. If VIC dictates more than ~10 items at once, confirm the list with him first. Lanes: buy (stock to buy for Thriftin), thriftin (shop, posting, orders), money (bills, VAT, Fortnox), people (friends, family, birthdays, dates), life (trips, health, home, errands), inbox (email replies). Times: ISO with Europe/Stockholm offset, or YYYY-MM-DD for all day. Posting tasks for TikTok/Instagram get proof_type link. Returns the saved items with their ids.",
+    description: "Save items VIC asked for (you do the understanding). One item per separate thing. If VIC dictates more than ~10 items at once, confirm the list with him first. Lanes: buy (stock to buy for Thriftin), thriftin (shop, posting, orders), money (bills, VAT, Fortnox), people (friends, family, birthdays, dates), life (trips, health, home, errands), inbox (email replies). Times: ISO with Europe/Stockholm offset, or YYYY-MM-DD for all day. For something that must not slip (like a nightly habit), set remind_again_minutes for a second push. Returns the saved items with their ids.",
     inputSchema: { type: "object", properties: { items: { type: "array", items: ITEM_SCHEMA } }, required: ["items"] },
   },
   {
     name: "update",
-    description: "Change an item: move it to another day/time, rename, change lane, notes, reminder, repetition or proof. Give the item id (8 characters from any listing) and only the fields to change. Use null to clear due_at, remind_at or recurrence.",
+    description: "Change an item: move it to another day/time, rename, change lane, notes, reminder (and remind_again_minutes) or repetition. Give the item id (8 characters from any listing) and only the fields to change. Use null to clear due_at, remind_at or recurrence.",
     inputSchema: {
       type: "object",
       properties: {
@@ -56,8 +54,8 @@ export const TOOL_DEFS = [
         title: { type: "string" }, lane: { type: "string" }, notes: { type: ["string", "null"] },
         due_at: { type: ["string", "null"] }, remind_at: { type: ["string", "null"] },
         recurrence: { type: ["string", "null"], enum: ["daily", "weekdays", "weekly", "monthly", "yearly", null] },
-        proof_type: { type: "string", enum: ["none", "link", "photo"] },
         location: { type: ["string", "null"] }, travel_minutes: { type: ["integer", "null"] },
+        remind_again_minutes: { type: ["integer", "null"], description: "Second push this many minutes after the reminder if still not done (5–720); null to stop." },
       },
       required: ["id"],
     },
@@ -69,7 +67,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "complete",
-    description: "Mark an item done. Items with proof_type link need proof_url (the post's link, e.g. on tiktok.com or instagram.com) - ask VIC to paste it. Photo-proof items can only be closed in the Jarvis app. Repeating items move to their next day.",
+    description: "Mark an item done. Repeating items move to their next day.",
     inputSchema: { type: "object", properties: { id: { type: "string" }, proof_url: { type: "string" } }, required: ["id"] },
   },
   {

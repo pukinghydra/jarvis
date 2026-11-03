@@ -25,7 +25,7 @@ async function logOutcome(item: any, occurredOn: string, outcome: "done" | "skip
   must(
     await sb.from("item_log").upsert({
       item_id: item.id, title: item.title, lane_id: item.lane_id, occurred_on: occurredOn, outcome,
-      proof_type: item.proof_type, ...extra,
+      proof_type: item.recur ? "habit" : item.proof_type, ...extra,
     }, { onConflict: "item_id,occurred_on" }),
     "log outcome",
   );
@@ -102,7 +102,7 @@ export async function rollPast(now: Date) {
       if (cur.kind !== "birthday" && cur.kind !== "event") {
         await sb.from("item_log").upsert({
           item_id: cur.id, title: cur.title, lane_id: cur.lane_id, occurred_on: localDateStr(new Date(cur.due_at)),
-          outcome: "missed", proof_type: cur.proof_type,
+          outcome: "missed", proof_type: cur.recur ? "habit" : cur.proof_type,
         }, { onConflict: "item_id,occurred_on", ignoreDuplicates: true });
         out.missed++;
       }
@@ -134,7 +134,7 @@ export async function stats(now: Date) {
   ) ?? []) as (LogRow & { title: string; reason: string | null })[];
   const dayEnd = startOfLocalDay(addDays(today, 1)).toISOString();
   const openProof = must(
-    await sb.from("items").select("id", { count: "exact", head: false }).eq("status", "open").neq("proof_type", "none").lt("due_at", dayEnd),
+    await sb.from("items").select("id", { count: "exact", head: false }).eq("status", "open").not("recur", "is", null).lt("due_at", dayEnd),
     "open proof",
   ) ?? [];
   const thisWeekStart = weekStart(today);

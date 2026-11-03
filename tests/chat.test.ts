@@ -178,8 +178,8 @@ test("validateArgs: required, types, enums (incl. null), integers, nested items"
   eq(validateArgs(s.get("update"), { id: "a", recurrence: null, due_at: null, travel_minutes: 20 }), null);
   ok(validateArgs(s.get("update"), { id: "a", travel_minutes: 2.5 }));
   ok(validateArgs(s.get("add"), { items: "x" }));
-  eq(validateArgs(s.get("add"), { items: [{ title: "Ring", lane: "people", proof_type: "link", proof_domains: ["tiktok.com"] }] }), null);
-  ok(validateArgs(s.get("add"), { items: [{ title: "Ring", proof_type: "video" }] }));
+  eq(validateArgs(s.get("add"), { items: [{ title: "Ring", lane: "people", remind_again_minutes: 60 }] }), null);
+  ok(validateArgs(s.get("add"), { items: [{ title: "Ring", kind: "video" }] }));
   ok(validateArgs(s.get("remember"), { fact: "x", tags: "people" }), "tags must be an array");
   eq(validateArgs(s.get("remember"), { fact: "Johan är min bror", tags: ["people"] }), null);
   eq(validateArgs(s.get("add_mail_rule"), { rule: "ignorera allt från ICA", ignore_sender: "@ica.se" }), null);

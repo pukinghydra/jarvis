@@ -113,9 +113,11 @@ test("add: reminder without remind_at reminds at due time", () => {
   const r = normalizeItem({ title: "Ring mamma", kind: "reminder", due_at: "2026-11-03T18:00:00+01:00" }, lanes);
   ok(r.ok); if (r.ok) eq(r.row.remind_at, "2026-11-03T17:00:00.000Z");
 });
-test("add: posting proof infers tiktok domain", () => {
-  const r = normalizeItem({ title: "Posta på TikTok", lane: "thriftin", proof_type: "link" }, lanes);
-  ok(r.ok); if (r.ok) eq(r.row.proof_domains, ["tiktok.com"]);
+test("add: proof-to-close is off; remind_again_minutes is kept with a reminder", () => {
+  const r = normalizeItem({ title: "Post on TikTok", lane: "thriftin", proof_type: "link", remind_at: "2026-11-03T20:30:00+01:00", remind_again_minutes: 60 }, lanes);
+  ok(r.ok); if (r.ok) { eq(r.row.proof_type, "none"); eq(r.row.proof_domains, []); eq(r.row.remind_again_minutes, 60); }
+  const n = normalizeItem({ title: "x", remind_again_minutes: 60 }, lanes);
+  ok(n.ok); if (n.ok) eq(n.row.remind_again_minutes, null, "no reminder, no second push");
 });
 test("add: birthday is yearly in people", () => {
   const r = normalizeItem({ title: "Mammas födelsedag", kind: "birthday", due_at: "2027-03-12" }, lanes);
