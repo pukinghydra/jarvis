@@ -182,7 +182,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "calendar_add_event",
-    description: "Put an event in VIC's iPhone calendar (it shows up in the Calendar app). Use it for appointments and plans with a time or day (\"tandläkare tis 14:00\", \"middag hos mamma lördag\"); use add for tasks/reminders. Calendar: the one VIC names, else Hem for clearly private things, else the default (Arbete). Never invites anyone. After saving, say in one line what you put where.",
+    description: "Put an event in VIC's iPhone calendar (it shows up in the Calendar app). Use it for appointments and plans with a time or day (\"tandläkare tis 14:00\", \"middag hos mamma lördag\"); use add for tasks/reminders. Calendar: always Arbete (VIC only uses that one), unless he explicitly names another. Never invites anyone. After saving, say in one line what you put where.",
     inputSchema: {
       type: "object",
       properties: {
@@ -190,7 +190,7 @@ export const TOOL_DEFS = [
         start: { type: "string", description: "YYYY-MM-DD for an all-day event, or a time with the Stockholm offset, e.g. 2026-11-06T14:00:00+01:00." },
         end: { type: "string", description: "Optional. Same format. Default: 1 hour after start (all-day: same day)." },
         all_day: { type: "boolean" },
-        calendar: { type: "string", description: "Calendar name, e.g. Arbete or Hem (calendar_list shows them)." },
+        calendar: { type: "string", description: "Leave empty: events go to Arbete. Only set it if VIC explicitly names another calendar." },
         location: { type: "string" },
         notes: { type: "string" },
         alert_minutes: { type: "integer", description: "iPhone alert this many minutes before (e.g. 30). Omit for none." },
