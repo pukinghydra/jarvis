@@ -27,3 +27,6 @@ verify_jwt = false   # the app's voice chat; owner checked in code
 
 [functions.transcribe]
 verify_jwt = false   # the Talk screen's recordings; owner checked in code
+
+[functions.shortcut]
+verify_jwt = false   # iPhone shortcut, checked with x-jarvis-key (app_secrets SHORTCUT_KEY)

@@ -68,6 +68,12 @@ export default function Settings({ session }) {
     });
   };
 
+  const [copiedWhat, setCopiedWhat] = useState("");
+  const copy = async (value, what) => {
+    if (!value) return;
+    try { await navigator.clipboard.writeText(value); setCopiedWhat(what); setTimeout(() => setCopiedWhat(""), 2500); }
+    catch { window.prompt("Copy this", value); }
+  };
   const copyMcp = async () => {
     try { await navigator.clipboard.writeText(owner.mcp_url); setCopied(true); setTimeout(() => setCopied(false), 2500); }
     catch { window.prompt("Copy this URL", owner.mcp_url); }
@@ -83,6 +89,15 @@ export default function Settings({ session }) {
         <h3>Connect to Claude</h3>
         <p className="muted small">Claude app → Settings → Connectors → Add custom connector → paste this URL. Keep it secret: it is the key to Jarvis.</p>
         <button className="primary" onClick={copyMcp} disabled={!owner?.mcp_url}>{copied ? "Copied ✓" : "Copy connector URL"}</button>
+      </section>
+
+      <section>
+        <h3>Jarvis Talk shortcut (iPhone)</h3>
+        <p className="muted small">Talk to Jarvis with Apple's dictation: home-screen icon, Action Button or "Hey Siri, Jarvis". Copy these two into the shortcut. Keep the key secret.</p>
+        <div className="row">
+          <button className="ghost" onClick={() => copy(owner?.shortcut_url, "url")} disabled={!owner?.shortcut_url}>{copiedWhat === "url" ? "Copied ✓" : "Copy address"}</button>
+          <button className="primary" onClick={() => copy(owner?.shortcut_key, "key")} disabled={!owner?.shortcut_key}>{copiedWhat === "key" ? "Copied ✓" : "Copy key"}</button>
+        </div>
       </section>
 
       <section>

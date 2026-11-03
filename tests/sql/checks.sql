@@ -139,3 +139,16 @@ begin
   delete from public.items where id = iid;
 end $$;
 select 'REMIND AGAIN CHECKS PASSED';
+
+-- shortcut key: made by the migration, shown to the owner only
+do $$ begin
+  assert (select length(value) from public.app_secrets where key = 'SHORTCUT_KEY') = 64, 'shortcut key made';
+end $$;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+do $$ begin
+  assert (public.owner_settings() ->> 'shortcut_url') like 'https://mcrpchqkconbesgborhj.supabase.co/functions/v1/shortcut', 'shortcut url';
+  assert length(public.owner_settings() ->> 'shortcut_key') = 64, 'owner sees shortcut key';
+end $$;
+reset role;
+select 'SHORTCUT CHECKS PASSED';
