@@ -15,7 +15,7 @@ import { draftReply, markEmailHandled, resolveEmail, scanEmails } from "./email.
 import { msStatus } from "./graph.ts";
 import { runBrief } from "./brief.ts";
 import { thriftinAction, thriftinFeed } from "./thriftin.ts";
-import { addEvent, deleteEvent, listCalendars, updateEvent } from "./caldav.ts";
+import { addEvent, caldavAuth, deleteEvent, listCalendars, updateEvent } from "./caldav.ts";
 import { formatSchedule, formatShiftChange } from "./thriftin-core.ts";
 import { buyList } from "./buylist.ts";
 import { styleFor } from "./style.ts";
@@ -65,9 +65,31 @@ async function insertItems(rawItems: unknown, source: string, captureId?: string
   });
   if (errors.length) throw new Error(`Nothing saved. Fix and resend: ${errors.join("; ")}`);
   if (!rows.length) return "No items given.";
-  const saved = must(await sb.from("items").insert(rows).select(ITEM_COLS), "save items") ?? [];
-  const names = new Map(ls.map((l) => [l.id, l.name]));
-  return `Saved ${saved.length}:\n${saved.map((i: any) => line(i, names)).join("\n")}`;
+
+  // Meetings and appointments belong in VIC's iPhone calendar (Arbete), not
+  // in the to-do list: an "event" with a date goes there whenever iCloud is
+  // set up, whichever tool Claude picked. If the calendar can't be reached it
+  // stays a Jarvis item, so nothing is lost.
+  const out: string[] = [];
+  const keep: any[] = [];
+  const calendarOn = !!(await caldavAuth().catch(() => null));
+  for (const r of rows) {
+    if (!(calendarOn && r.kind === "event" && r.due_at)) { keep.push(r); continue; }
+    try {
+      const start = r.all_day ? localDateStr(new Date(r.due_at)) : r.due_at;
+      const ev = await addEvent({ title: r.title, start, all_day: r.all_day, location: r.location, notes: r.notes });
+      out.push(`In the iPhone calendar (${ev.calendar}): ${r.title} ${shortWhen(ev.when.start, ev.when.allDay)}${ev.when.allDay ? "" : `–${localTimeStr(ev.when.end)}`}${ev.row?.short_id ? ` [ev ${ev.row.short_id}]` : ""}`);
+    } catch (e) {
+      out.push(`(calendar failed: ${(e as Error).message}; kept in Jarvis instead)`);
+      keep.push(r);
+    }
+  }
+  if (keep.length) {
+    const saved = must(await sb.from("items").insert(keep).select(ITEM_COLS), "save items") ?? [];
+    const names = new Map(ls.map((l) => [l.id, l.name]));
+    out.push(...saved.map((i: any) => line(i, names)));
+  }
+  return `Saved ${rows.length}:\n${out.join("\n")}`;
 }
 
 type Handler = (args: Record<string, any>) => Promise<string>;
