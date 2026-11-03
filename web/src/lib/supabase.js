@@ -36,7 +36,7 @@ export async function transcribe(audio) {
   let body;
   if (audio instanceof Blob) {
     body = new FormData();
-    const ext = audio.type.includes("webm") ? "webm" : audio.type.includes("ogg") ? "ogg" : "m4a";
+    const ext = audio.type.includes("wav") ? "wav" : audio.type.includes("webm") ? "webm" : audio.type.includes("ogg") ? "ogg" : "m4a";
     body.append("audio", audio, `talk.${ext}`);
     body.append("type", audio.type);
   } else {

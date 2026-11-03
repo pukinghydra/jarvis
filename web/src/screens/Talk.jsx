@@ -61,7 +61,8 @@ export default function Talk({ onSaved }) {
       const text = (r.text ?? "").trim();
       if (!text) { setErr(t("Hörde inget. Försök igen, närmare mikrofonen.", "Heard nothing. Try again, closer to the mic.")); setMode("idle"); return; }
       blobRef.current = null;
-      setDraft(text); setMode("review");
+      setMode("idle");
+      send(text, "voice");
     } catch (e) {
       setErr(e.message); setMode("idle");
     }
@@ -119,11 +120,11 @@ export default function Talk({ onSaved }) {
   };
   const switchLang = (l) => { setLang(l); prefs.setLang(l); };
 
-  const micLabel = busy ? "…" : mode === "recording" ? "■" : mode === "transcribing" ? "…" : "🎙";
+  const micLabel = busy ? "…" : mode === "recording" ? "Send" : mode === "transcribing" ? "…" : "🎙";
   const status =
     busy ? t("Jarvis tänker…", "Jarvis is thinking…")
-    : mode === "recording" ? `${clock(secs)} · ${t("tryck för att stoppa", "tap to stop")}`
-    : mode === "transcribing" ? t("Skriver ut…", "Transcribing…")
+    : mode === "recording" ? `${clock(secs)} · ${t("tryck på den gröna knappen när du är klar", "tap the green button when you're done")}`
+    : mode === "transcribing" ? t("Skriver ut…", "Listening back…")
     : mode === "review" ? t("Kolla texten, ändra om du vill", "Check the text, edit if needed")
     : stt === undefined ? ""
     : recordable ? t("Tryck och prata, tryck igen när du är klar", "Tap and talk, tap again when done")
@@ -177,7 +178,7 @@ export default function Talk({ onSaved }) {
         ) : (
           <>
             <button className={`mic${mode === "recording" ? " live" : ""}${messages.length ? " small-mic" : ""}`} onClick={micTap}
-              disabled={busy || mode === "transcribing"} aria-label={mode === "recording" ? "Stop" : "Talk"}>
+              disabled={busy || mode === "transcribing"} aria-label={mode === "recording" ? "Send" : "Talk"}>
               {micLabel}
             </button>
             {mode === "recording" && (
