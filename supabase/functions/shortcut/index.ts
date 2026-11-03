@@ -20,12 +20,22 @@ const textResponse = (body: string, status = 200) =>
 
 class Say extends Error { constructor(msg: string, public status = 400) { super(msg); } }
 
+// Request Body "File" in Shortcuts sends the recording itself as the body.
+const isAudioBody = (type: string) => /^(audio|video)\//.test(type) || type.startsWith("application/octet-stream");
+
 async function heard(req: Request): Promise<string> {
   const type = (req.headers.get("content-type") ?? "").toLowerCase();
-  if (!type.startsWith("multipart/form-data")) return await readText(req);
-  const form = await req.formData();
-  const f = form.get("audio") ?? form.get("file");
-  if (!(f instanceof Blob)) throw new Say("No recording came with the request. In the shortcut, the form field must be a File called audio.");
+  let f: Blob | null = null;
+  if (type.startsWith("multipart/form-data")) {
+    const form = await req.formData();
+    const v = form.get("audio") ?? form.get("file");
+    if (!(v instanceof Blob)) throw new Say("No recording came with the request. In the shortcut, set Request Body to File and pick Recorded Audio.");
+    f = v;
+  } else if (isAudioBody(type)) {
+    f = new Blob([await req.arrayBuffer()], { type: type.split(";")[0] });
+  } else {
+    return await readText(req);
+  }
   const audioType = await guessAudioType(f, (f as File).name ?? "");
   const bad = checkAudio(f.size, audioType);
   if (bad) { console.error("shortcut audio rejected:", JSON.stringify({ size: f.size, type: f.type, guessed: audioType })); throw new Say(bad); }
