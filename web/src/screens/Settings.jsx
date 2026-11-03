@@ -164,7 +164,9 @@ export default function Settings({ session }) {
       <section>
         <h3>Status</h3>
         <ul className="status-list">
-          <li>Calendars linked: {status?.calendars ?? "–"}</li>
+          <li>iPhone calendar: {status?.calendar_write?.configured
+            ? (status.calendar_write.ok ? `read + write (${status.calendar_write.calendars.join(", ")}; new events go to ${status.calendar_write.default_calendar})` : `error: ${status.calendar_write.error ?? "not checked yet"}`)
+            : `read only (${status?.calendars ?? 0} share link${status?.calendars === 1 ? "" : "s"})`}</li>
           <li>THRIFTIN data: {status ? (status.thriftin ? "connected" : "not connected") : "–"}</li>
           <li>Auto-sort notes (Claude API): {status ? (status.claude_api ? "on" : "off — sort them in the Claude app") : "–"}</li>
           <li>Email sorting + drafts (Claude API): {status ? (status.claude_api ? "on — every 15 min, 07–23" : "off — rule flags only") : "–"}</li>

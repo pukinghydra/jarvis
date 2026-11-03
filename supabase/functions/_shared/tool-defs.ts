@@ -165,6 +165,58 @@ export const TOOL_DEFS = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "calendar_list",
+    description: "VIC's iPhone (iCloud) calendars: their names (e.g. Arbete, Hem), the default one for new events, and whether Jarvis can write to them.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "calendar_events",
+    description: "Events in VIC's iPhone calendars for a date range, each with an id (ev xxxxxxxx) to use with calendar_update_event / calendar_delete_event. Default: today and the next 7 days.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        from: { type: "string", description: "YYYY-MM-DD (default today)." },
+        to: { type: "string", description: "YYYY-MM-DD, inclusive (default from + 7 days)." },
+      },
+    },
+  },
+  {
+    name: "calendar_add_event",
+    description: "Put an event in VIC's iPhone calendar (it shows up in the Calendar app). Use it for appointments and plans with a time or day (\"tandläkare tis 14:00\", \"middag hos mamma lördag\"); use add for tasks/reminders. Calendar: the one VIC names, else Hem for clearly private things, else the default (Arbete). Never invites anyone. After saving, say in one line what you put where.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "In the language VIC used." },
+        start: { type: "string", description: "YYYY-MM-DD for an all-day event, or a time with the Stockholm offset, e.g. 2026-11-06T14:00:00+01:00." },
+        end: { type: "string", description: "Optional. Same format. Default: 1 hour after start (all-day: same day)." },
+        all_day: { type: "boolean" },
+        calendar: { type: "string", description: "Calendar name, e.g. Arbete or Hem (calendar_list shows them)." },
+        location: { type: "string" },
+        notes: { type: "string" },
+        alert_minutes: { type: "integer", description: "iPhone alert this many minutes before (e.g. 30). Omit for none." },
+      },
+      required: ["title", "start"],
+    },
+  },
+  {
+    name: "calendar_update_event",
+    description: "Change an event in VIC's iPhone calendar (move it, rename, place, notes). Give the id from calendar_events and only the fields to change; moving keeps its length. For events VIC made himself, say the change in one line and wait for his yes first. Repeating events and events with invitees can't be changed by Jarvis (he does those on the iPhone).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        title: { type: "string" }, start: { type: "string" }, end: { type: "string" }, all_day: { type: "boolean" },
+        location: { type: ["string", "null"] }, notes: { type: ["string", "null"] },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "calendar_delete_event",
+    description: "Delete an event from VIC's iPhone calendar. Always confirm with VIC in one line first (\"Tar bort 'Tandläkare' tis 14:00 — ok?\"). Repeating events and events with invitees can't be deleted by Jarvis.",
+    inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+  },
+  {
     name: "thriftin_schedule",
     description: "THRIFTIN's staff schedule (the Schedule tab in the shop app): shifts per person and day (scheduled / worked / off, hours) and day notes, plus the list of active staff. Default range: today and the next 13 days; max 62 days.",
     inputSchema: {

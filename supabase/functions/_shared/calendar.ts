@@ -1,8 +1,10 @@
 // deno-lint-ignore-file no-explicit-any
 // Keep public.calendar_events in step with VIC's calendars.
-//  - Main source: iPhone iCloud calendars ("Hem", "Arbete") through their
-//    public share links. Secret ICS_URL = comma-separated list of links
-//    (webcal:// or https://).
+//  - Best source: iCloud over CalDAV (secrets ICLOUD_APPLE_ID +
+//    ICLOUD_APP_PASSWORD): every event calendar (Hem, Arbete...), and rows
+//    keep href/etag so Jarvis can change them (caldav.ts).
+//  - Fallback: the calendars' public share links. Secret ICS_URL =
+//    comma-separated list of links (webcal:// or https://). Read only.
 //  - No Outlook/Graph calendar: VIC doesn't use it, and Jarvis doesn't ask
 //    Microsoft for calendar access.
 // Window: yesterday to +8 days. Called by the tick every 10 minutes and by
@@ -12,6 +14,7 @@ import { config } from "./config.ts";
 import { sb } from "./db.ts";
 import { icsName, parseIcs } from "./ics.ts";
 import { addDays, localDateStr, startOfLocalDay } from "./time.ts";
+import { caldavAuth, recordCaldav, syncCaldav } from "./caldav.ts";
 
 export function icsUrls(raw: string): string[] {
   return raw.split(/[,\s]+/).map((u) => u.trim()).filter(Boolean)
@@ -27,6 +30,23 @@ export async function syncCalendar(now: Date) {
   const out: Record<string, unknown> = {};
   const answered: [string, string][] = [];
   const syncedAt = new Date().toISOString();
+
+  // iCloud over CalDAV when set up; the share links only if that fails.
+  const auth = await caldavAuth();
+  if (auth) {
+    try {
+      const r = await syncCaldav(auth, from, to);
+      await saveAndPrune(dedupeEvents(r.rows), r.answered, from, to, today, r.syncedAt);
+      // Rows the share links made earlier (no href) are replaced now.
+      if (r.answered.length) await sb.from("calendar_events").delete().eq("source", "icloud").is("href", null);
+      await recordCaldav({ ok: true, calendars: r.answered });
+      return { via: "caldav", ...r.counts, saved: dedupeEvents(r.rows).length };
+    } catch (e) {
+      const msg = String((e as Error).message ?? e);
+      await recordCaldav({ ok: false, error: msg });
+      out["caldav error"] = msg;
+    }
+  }
 
   const urls = icsUrls(await config("ICS_URL"));
   for (let i = 0; i < urls.length; i++) {
@@ -51,18 +71,22 @@ export async function syncCalendar(now: Date) {
   }
 
   const unique = dedupeEvents(rows);
+  await saveAndPrune(unique, answered.map(([, c]) => c), from, to, today, syncedAt);
+  return { ...out, saved: unique.length };
+}
+
+// Save, then remove events a calendar no longer has (moved/deleted) - only
+// for calendars that answered this time, so a network blip deletes nothing.
+async function saveAndPrune(unique: any[], answered: string[], from: Date, to: Date, today: string, syncedAt: string) {
   if (unique.length) {
     const { error } = await sb.from("calendar_events").upsert(unique, { onConflict: "id" });
     if (error) throw new Error(`calendar save: ${error.message}`);
   }
-  // Remove events a calendar no longer has (moved/deleted) - only for
-  // calendars that answered this time, so a network blip deletes nothing.
-  for (const [source, calendar] of answered) {
-    await sb.from("calendar_events").delete().eq("source", source).eq("calendar", calendar)
+  for (const calendar of answered) {
+    await sb.from("calendar_events").delete().eq("source", "icloud").eq("calendar", calendar)
       .gte("start_at", from.toISOString()).lt("start_at", to.toISOString()).lt("synced_at", syncedAt);
   }
   await sb.from("calendar_events").delete().lt("start_at", startOfLocalDay(addDays(today, -7)).toISOString());
-  return { ...out, saved: unique.length };
 }
 
 // Same event in two calendars (same title + start): keep the first. Sorted.

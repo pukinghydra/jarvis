@@ -15,6 +15,7 @@ import { draftReply, markEmailHandled, resolveEmail, scanEmails } from "./email.
 import { msStatus } from "./graph.ts";
 import { runBrief } from "./brief.ts";
 import { thriftinAction, thriftinFeed } from "./thriftin.ts";
+import { addEvent, deleteEvent, listCalendars, updateEvent } from "./caldav.ts";
 import { formatSchedule, formatShiftChange } from "./thriftin-core.ts";
 import { buyList } from "./buylist.ts";
 import { styleFor } from "./style.ts";
@@ -285,6 +286,34 @@ function handlers(source: ItemSource): Record<ToolName, Handler> {
         "BUY MORE:", ...b.buy.map((r, n) => `${n + 1}. ${r.category} — ${r.why}`),
         "", "SKIP FOR NOW:", ...b.skip.map((r) => `- ${r.category} — ${r.why}`),
       ].join("\n");
+    },
+    calendar_list: async () => {
+      const r = await listCalendars();
+      if (!r.write) return `Reading only (share link). ${r.note}`;
+      return `Calendars: ${r.calendars.map((c) => `${c.name}${c.writable ? "" : " (read only)"}`).join(", ")}. Default for new events: ${r.default_calendar}.`;
+    },
+    calendar_events: async (a) => {
+      const today = localDateStr(new Date());
+      const from = typeof a.from === "string" && /^\d{4}-\d{2}-\d{2}$/.test(a.from) ? a.from : today;
+      const to = typeof a.to === "string" && /^\d{4}-\d{2}-\d{2}$/.test(a.to) ? a.to : addDays(from, 7);
+      const rows = must(await sb.from("calendar_events").select("short_id, title, start_at, end_at, all_day, calendar, location, href")
+        .gte("start_at", startOfLocalDay(from).toISOString()).lt("start_at", startOfLocalDay(addDays(to, 1)).toISOString()).order("start_at").limit(200), "calendar") ?? [];
+      if (!rows.length) return `No events ${from} → ${to}.`;
+      return rows.map((e: any) => `[ev ${e.short_id}] ${shortWhen(new Date(e.start_at), e.all_day)}${e.all_day ? "" : `–${localTimeStr(new Date(e.end_at ?? e.start_at))}`} ${e.title}${e.location ? ` @ ${e.location}` : ""} (${e.calendar}${e.href ? "" : ", read only"})`).join("\n");
+    },
+    calendar_add_event: async (a) => {
+      const r = await addEvent({ title: a.title, start: a.start, end: a.end, all_day: a.all_day, calendar: a.calendar, location: a.location, notes: a.notes, alert_minutes: a.alert_minutes });
+      const w = r.when;
+      return `Added to ${r.calendar}: ${String(a.title).trim()} ${shortWhen(w.start, w.allDay)}${w.allDay ? "" : `–${localTimeStr(w.end)}`}${r.row?.short_id ? ` [ev ${r.row.short_id}]` : ""}`;
+    },
+    calendar_update_event: async (a) => {
+      const r = await updateEvent(String(a.id ?? ""), { title: a.title, start: a.start, end: a.end, all_day: a.all_day, location: a.location, notes: a.notes });
+      const row = r.row;
+      return row ? `Changed: ${row.title} ${shortWhen(new Date(row.start_at), row.all_day)}${row.all_day ? "" : `–${localTimeStr(new Date(row.end_at ?? row.start_at))}`} (${row.calendar}) [ev ${row.short_id}]` : `Changed: ${r.before.title}`;
+    },
+    calendar_delete_event: async (a) => {
+      const ev = await deleteEvent(String(a.id ?? ""));
+      return `Deleted from ${ev.calendar}: ${ev.title} ${shortWhen(new Date(ev.start_at), ev.all_day)}`;
     },
     thriftin_schedule: async (a) => formatSchedule(await thriftinAction("schedule", { from: a.from, to: a.to })),
     thriftin_set_shift: async (a) => formatShiftChange(await thriftinAction("shift_set", { person: a.person, date: a.date, status: a.status, hours: a.hours })),

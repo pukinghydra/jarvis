@@ -28,6 +28,7 @@ import { buyList } from "../_shared/buylist.ts";
 import { hasClaude } from "../_shared/claude.ts";
 import { appSecret, vapidKeys } from "../_shared/secrets.ts";
 import { chooseProvider } from "../_shared/transcribe-core.ts";
+import { caldavStatus } from "../_shared/caldav.ts";
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 const waitUntil = (p: Promise<unknown>) => (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil ? EdgeRuntime.waitUntil(p) : undefined);
@@ -56,6 +57,7 @@ Deno.serve(async (req) => {
           hotmail_ready: !!(msId && msSecret),
           hotmail_redirect_uri: redirectUri(),
           calendars: icsUrls(ics).length,
+          calendar_write: await caldavStatus().catch(() => null),
           thriftin: !!(feedUrl && feedToken),
           app_url: appUrl || null,
           speech_to_text: stt ? `${stt.name} (${stt.model})` : null,

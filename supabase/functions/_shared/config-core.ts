@@ -18,6 +18,8 @@ export const CONFIG_KEYS = [
   "OPENAI_API_KEY",
   "ELEVENLABS_API_KEY",
   "TRANSCRIBE_MODEL",
+  "ICLOUD_APPLE_ID",
+  "ICLOUD_APP_PASSWORD",
 ] as const;
 export type ConfigKey = typeof CONFIG_KEYS[number];
 
