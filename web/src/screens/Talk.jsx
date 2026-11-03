@@ -27,7 +27,8 @@ export default function Talk({ onSaved }) {
   const endRef = useRef(null);
   const sv = lang.startsWith("sv");
   const t = (_sv, en) => en; // UI is English; what VIC says and Jarvis answers keep their own language
-  const recordable = canRecord() && !!stt;
+  // Always record on tap: never wait for the server check (that sent early taps to the keyboard).
+  const recordable = canRecord();
 
   useEffect(() => {
     chat("history").then((h) => { setClaude(h.claude !== false); setMessages(h.messages ?? []); }).catch(() => { /* empty conversation is fine */ });
@@ -105,8 +106,7 @@ export default function Talk({ onSaved }) {
     if (mode === "recording") { stopRec(); return; }
     if (mode !== "idle") return;
     if (!recordable) {
-      typeRef.current?.focus();
-      setHint(t("Tryck på tangentbordets 🎤 för att diktera.", "Tap the keyboard's 🎤 to dictate."));
+      setErr(t("Den här webbläsaren kan inte spela in ljud.", "This browser can't record audio."));
       return;
     }
     startRec();
@@ -126,9 +126,7 @@ export default function Talk({ onSaved }) {
     : mode === "recording" ? `${clock(secs)} · ${t("tryck på den gröna knappen när du är klar", "tap the green button when you're done")}`
     : mode === "transcribing" ? t("Skriver ut…", "Listening back…")
     : mode === "review" ? t("Kolla texten, ändra om du vill", "Check the text, edit if needed")
-    : stt === undefined ? ""
-    : recordable ? t("Tryck och prata, tryck igen när du är klar", "Tap and talk, tap again when done")
-    : t("Tryck: tangentbordet öppnas, använd dess 🎤", "Tap: the keyboard opens, use its 🎤");
+    : t("Tryck och prata, tryck på den gröna knappen när du är klar", "Tap and talk, push the green button when you're done");
 
   return (
     <div className="screen talk">
