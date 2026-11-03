@@ -20,6 +20,7 @@ export const ITEM_SCHEMA = {
     proof_domains: { type: "array", items: { type: "string" }, description: "For proof_type link: allowed sites, e.g. [\"tiktok.com\"]. Inferred from the title if omitted." },
     location: { type: "string", description: "Place, for events (enables a leave-now alert)." },
     travel_minutes: { type: "integer", description: "Minutes to get there (default from settings, usually 30)." },
+    remind_again_minutes: { type: "integer", description: "Remind again this many minutes after remind_at if it is still not done (5–720), e.g. 60 = a second push an hour later. Needs remind_at." },
   },
   required: ["title"],
 };

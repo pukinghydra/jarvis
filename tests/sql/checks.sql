@@ -122,3 +122,20 @@ do $$ begin
 end $$;
 reset role;
 select 'CHAT + MEMORY CHECKS PASSED';
+
+-- remind again: second push once per occurrence, only while still open
+do $$
+declare iid uuid; n int;
+begin
+  insert into public.items (title, remind_at, reminded_at, remind_again_minutes)
+  values ('Post on TikTok', '2026-11-03 19:30+00', '2026-11-03 19:30+00', 60) returning id into iid;
+  select count(*) into n from public.claim_followups('2026-11-03 20:00+00'); assert n = 0, 'not before 60 min';
+  select count(*) into n from public.claim_followups('2026-11-03 20:31+00'); assert n = 1, 'second push at +60';
+  select count(*) into n from public.claim_followups('2026-11-03 20:35+00'); assert n = 0, 'only once';
+  update public.items set remind_at = '2026-11-04 19:30+00', reminded_at = '2026-11-04 19:30+00' where id = iid;
+  select count(*) into n from public.claim_followups('2026-11-04 20:31+00'); assert n = 1, 'next day again';
+  update public.items set remind_at = '2026-11-05 19:30+00', reminded_at = '2026-11-05 19:30+00', status = 'done' where id = iid;
+  select count(*) into n from public.claim_followups('2026-11-05 20:31+00'); assert n = 0, 'not when done';
+  delete from public.items where id = iid;
+end $$;
+select 'REMIND AGAIN CHECKS PASSED';

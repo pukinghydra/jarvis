@@ -19,6 +19,7 @@ export type ItemInput = {
   proof_domains?: unknown;
   location?: unknown;
   travel_minutes?: unknown;
+  remind_again_minutes?: unknown;
 };
 
 export type ItemRowIn = {
@@ -34,6 +35,7 @@ export type ItemRowIn = {
   proof_domains: string[];
   location: string | null;
   travel_minutes: number | null;
+  remind_again_minutes: number | null;
 };
 
 const KINDS = ["task", "reminder", "buy", "birthday", "event"];
@@ -113,6 +115,8 @@ export function normalizeItem(input: ItemInput, lanes: LaneRef[]): { ok: true; r
 
   const tm = input.travel_minutes;
   const travel = typeof tm === "number" && Number.isInteger(tm) && tm >= 0 && tm <= 600 ? tm : null;
+  const ra = typeof input.remind_again_minutes === "string" ? Number(input.remind_again_minutes) : input.remind_again_minutes;
+  const again = typeof ra === "number" && Number.isInteger(ra) && ra >= 5 && ra <= 720 && remindAt ? ra : null;
 
   return {
     ok: true,
@@ -129,6 +133,7 @@ export function normalizeItem(input: ItemInput, lanes: LaneRef[]): { ok: true; r
       proof_domains: domains,
       location: str(input.location).slice(0, 300) || null,
       travel_minutes: travel,
+      remind_again_minutes: again,
     },
   };
 }

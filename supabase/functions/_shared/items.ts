@@ -8,7 +8,7 @@ import { rollForward, type Recur } from "./recur.ts";
 import { addDays, localDateStr, startOfLocalDay } from "./time.ts";
 import { streak, weekScore, weekStart, type LogRow } from "./score.ts";
 
-const ITEM_COLS = "id, short_id, lane_id, kind, title, notes, status, due_at, all_day, remind_at, reminded_at, recur, proof_type, proof_domains, proof_url, proof_path, skip_reason, location, travel_minutes, email_id, done_at, created_at";
+const ITEM_COLS = "id, short_id, lane_id, kind, title, notes, status, due_at, all_day, remind_at, reminded_at, recur, proof_type, proof_domains, proof_url, proof_path, skip_reason, location, travel_minutes, remind_again_minutes, email_id, done_at, created_at";
 
 // Accepts the full id or the first 8 characters (what the Claude app sees).
 export async function resolveItem(ref: string): Promise<any> {

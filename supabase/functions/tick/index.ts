@@ -18,7 +18,7 @@ import { timingSafeEqual } from "../_shared/crypto.ts";
 import { sb, claimOnce } from "../_shared/db.ts";
 import { appSecret } from "../_shared/secrets.ts";
 import { rollPast } from "../_shared/items.ts";
-import { sendBirthdayAlerts, sendLeaveAlerts, sendReminders } from "../_shared/alerts.ts";
+import { sendBirthdayAlerts, sendFollowups, sendLeaveAlerts, sendReminders } from "../_shared/alerts.ts";
 import { syncCalendar } from "../_shared/calendar.ts";
 import { scanEmails } from "../_shared/email.ts";
 import { triageNewEmails } from "../_shared/email-triage.ts";
@@ -68,6 +68,7 @@ Deno.serve(async (req) => {
   // Quick, every minute.
   await step(report, "roll", () => rollPast(now));
   await step(report, "reminders", () => sendReminders(now));
+  await step(report, "followups", () => sendFollowups(now));
   await step(report, "leave", () => sendLeaveAlerts(now));
   await step(report, "birthdays", () => sendBirthdayAlerts(now));
 

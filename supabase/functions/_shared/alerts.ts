@@ -22,6 +22,19 @@ export async function sendReminders(now: Date) {
   return due.length;
 }
 
+// Second push for items with remind_again_minutes that are still open that
+// long after their reminder (e.g. TikTok at 20:30, again 21:30). Once per
+// occurrence; claimed in one statement like the first reminder.
+export async function sendFollowups(now: Date) {
+  const { data, error } = await sb.rpc("claim_followups", { p_now: now.toISOString() });
+  if (error) throw new Error(`follow-ups: ${error.message}`);
+  const due = (data ?? []) as any[];
+  for (const i of due) {
+    await push({ title: i.title, body: "Fortfarande inte klart. Gör det nu.", url: `/?tab=today&item=${i.id}`, tag: `item-${i.id}` });
+  }
+  return due.length;
+}
+
 // Leave-by = start - travel minutes (event's own, else the setting). Sent
 // once, in the minutes between leave-by and the start.
 export async function sendLeaveAlerts(now: Date) {

@@ -147,11 +147,12 @@ function handlers(source: ItemSource): Record<ToolName, Handler> {
         proof_domains: has("proof_type") ? undefined : item.proof_domains,
         location: has("location") ? a.location : item.location,
         travel_minutes: has("travel_minutes") ? a.travel_minutes : item.travel_minutes,
+        remind_again_minutes: has("remind_again_minutes") ? a.remind_again_minutes : item.remind_again_minutes,
       };
       const r = normalizeItem(merged, ls);
       if (!r.ok) throw new Error(r.error);
       const patch: any = { ...r.row };
-      if (patch.remind_at !== item.remind_at) patch.reminded_at = null;
+      if (patch.remind_at !== item.remind_at) { patch.reminded_at = null; patch.reminded_again_at = null; }
       const saved = must(await sb.from("items").update(patch).eq("id", item.id).select(ITEM_COLS), "update item") ?? [];
       return `Updated: ${line(saved[0] ?? item, new Map(ls.map((l) => [l.id, l.name])))}`;
     },
