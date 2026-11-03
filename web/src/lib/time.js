@@ -1,6 +1,6 @@
 // Display helpers, always in Stockholm time.
 const TZ = "Europe/Stockholm";
-const f = (opts) => new Intl.DateTimeFormat("en-GB", { timeZone: TZ, ...opts });
+const f = (opts) => new Intl.DateTimeFormat("sv-SE", { timeZone: TZ, ...opts });
 const dateKey = f({ year: "numeric", month: "2-digit", day: "2-digit" });
 
 export const localDate = (d) => {
@@ -12,8 +12,8 @@ export const time = (d) => f({ hour: "2-digit", minute: "2-digit", hourCycle: "h
 export const dayLabel = (d) => {
   const k = localDate(d), t = todayStr();
   const tomorrow = localDate(new Date(Date.now() + 86400000));
-  if (k === t) return "Today";
-  if (k === tomorrow) return "Tomorrow";
+  if (k === t) return "Idag";
+  if (k === tomorrow) return "Imorgon";
   return f({ weekday: "short", day: "numeric", month: "short" }).format(new Date(d));
 };
 export const when = (item) => {

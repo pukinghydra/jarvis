@@ -8,7 +8,7 @@ import Lanes from "./screens/Lanes.jsx";
 import Brief from "./screens/Brief.jsx";
 import Settings from "./screens/Settings.jsx";
 
-const TABS = [["capture", "🎙", "Talk"], ["today", "☀️", "Today"], ["lanes", "🎨", "Lanes"], ["brief", "📋", "Brief"], ["settings", "⚙️", "Settings"]];
+const TABS = [["capture", "🎙", "Prata"], ["today", "☀️", "Idag"], ["lanes", "🎨", "Områden"], ["brief", "📋", "Brief"], ["settings", "⚙️", "Inställningar"]];
 const tabFromUrl = () => {
   const t = new URLSearchParams(location.search).get("tab");
   return TABS.some(([id]) => id === t) ? t : "capture";
@@ -50,7 +50,7 @@ export default function App() {
   if (session === undefined) return <div className="screen muted center">…</div>;
   if (!session) return <Login />;
   if (isOwner === null) return <div className="screen muted center">…</div>;
-  if (!isOwner) return <div className="screen"><div className="err">This Jarvis belongs to someone else.</div><button className="ghost" onClick={() => supabase.auth.signOut()}>Sign out</button></div>;
+  if (!isOwner) return <div className="screen"><div className="err">Den här Jarvis tillhör någon annan.</div><button className="ghost" onClick={() => supabase.auth.signOut()}>Logga ut</button></div>;
 
   return (
     <div className="app">

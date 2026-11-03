@@ -12,7 +12,7 @@ export default function Brief() {
     try { setBriefs(must(await supabase.from("briefs").select("brief_date, kind, markdown, status").eq("status", "ready").order("brief_date", { ascending: false }).limit(14)) ?? []); }
     catch (e) { setErr(e.message); }
   };
-  useEffect(() => { load(); return stopSpeaking; }, []);
+  useEffect(() => { load(); }, []);
 
   const rebuild = async () => {
     setBusy(true); setErr("");
@@ -23,10 +23,10 @@ export default function Brief() {
   return (
     <div className="screen">
       <div className="row">
-        <button className="ghost" onClick={rebuild} disabled={busy}>{busy ? "Building…" : "↻ Now"}</button>
+        <button className="ghost" onClick={rebuild} disabled={busy}>{busy ? "Bygger…" : "↻ Nu"}</button>
       </div>
       {err && <div className="err">{err}</div>}
-      {b ? <Markdown text={b.markdown} /> : <p className="muted center">No brief yet. It arrives at 09:30, or tap ↻ Now.</p>}
+      {b ? <Markdown text={b.markdown} /> : <p className="muted center">Ingen brief än. Den kommer 09:30, eller tryck ↻ Nu.</p>}
       {briefs.length > 1 && (
         <div className="chips">
           {briefs.map((x, n) => <button key={x.brief_date} className={`chip${n === idx ? " on" : ""}`} onClick={() => setIdx(n)}>{x.brief_date.slice(5)}{x.kind === "weekly" ? " ★" : ""}</button>)}
