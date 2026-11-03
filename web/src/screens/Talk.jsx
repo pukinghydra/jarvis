@@ -22,6 +22,7 @@ export default function Talk({ onSaved }) {
   const [err, setErr] = useState("");
   const [hint, setHint] = useState("");
   const recRef = useRef(null);
+  const pendingStop = useRef(false);
   const blobRef = useRef(null);
   const typeRef = useRef(null);
   const endRef = useRef(null);
@@ -71,14 +72,20 @@ export default function Talk({ onSaved }) {
 
   const startRec = async () => {
     setErr(""); setHint(""); setSecs(0); setLevel(0); blobRef.current = null;
+    setMode("recording"); // green at once: the mic warms up behind it
     try {
       recRef.current = await startRecording({
         onTick: setSecs,
         onLevel: setLevel,
         onLimit: () => setHint(t("Max 10 minuter: stoppat.", "10 minute limit: stopped.")),
       });
-      setMode("recording");
+      const pending = pendingStop.current;
+      pendingStop.current = false;
+      if (pending === "cancel") { recRef.current.cancel(); recRef.current = null; setMode("idle"); return; }
+      if (pending) stopRec();
     } catch (e) {
+      pendingStop.current = false;
+      setMode("idle");
       const blocked = e?.name === "NotAllowedError" || e?.name === "SecurityError";
       setErr(blocked
         ? t("Mikrofonen är blockerad: tillåt den i Inställningar > Safari > Mikrofon (eller för appen).", "Microphone blocked: allow it in Settings > Safari > Microphone.")
@@ -89,8 +96,8 @@ export default function Talk({ onSaved }) {
 
   const stopRec = async () => {
     const rec = recRef.current;
+    if (!rec) { pendingStop.current = "stop"; return; } // still starting: stop as soon as it's ready
     recRef.current = null;
-    if (!rec) return;
     setMode("transcribing");
     let blob;
     try { blob = await rec.stop(); } catch (e) { setErr(e.message); setMode("idle"); return; }
@@ -98,7 +105,10 @@ export default function Talk({ onSaved }) {
     runTranscribe(blob);
   };
 
-  const cancelRec = () => { recRef.current?.cancel(); recRef.current = null; blobRef.current = null; setMode("idle"); setSecs(0); setLevel(0); };
+  const cancelRec = () => {
+    if (!recRef.current) pendingStop.current = "cancel"; // still starting
+    recRef.current?.cancel(); recRef.current = null; blobRef.current = null; setMode("idle"); setSecs(0); setLevel(0);
+  };
   const restart = () => { setDraft(""); setErr(""); blobRef.current = null; setMode("idle"); };
 
   const micTap = () => {

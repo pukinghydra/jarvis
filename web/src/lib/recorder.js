@@ -72,10 +72,13 @@ export async function startRecording({ onTick, onLevel, onLimit } = {}) {
   // (iPhone only lets audio start from one).
   const AC = window.AudioContext || window.webkitAudioContext;
   const ctx = new AC();
+  // resume() must be called inside the tap itself on iPhone; called after an
+  // await it can hang forever (the "tap does nothing" bug).
+  const resumed = ctx.state === "suspended" ? ctx.resume().catch(() => {}) : Promise.resolve();
   let stream;
   try {
     stream = await micStream();
-    if (ctx.state === "suspended") await ctx.resume();
+    await Promise.race([resumed, new Promise((r) => setTimeout(r, 1500))]);
   } catch (e) {
     try { ctx.close(); } catch { /* closed */ }
     throw e;
