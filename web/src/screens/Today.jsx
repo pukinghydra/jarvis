@@ -59,13 +59,13 @@ export default function Today({ lanes, refreshKey, onChange }) {
   useEffect(() => { load(); }, [refreshKey, lanes]);
 
   const changed = () => { load(); onChange?.(); };
-  if (err) return <div className="screen"><div className="err">{err}</div><button className="ghost" onClick={load}>Försök igen</button></div>;
-  if (!data) return <div className="screen muted center">Laddar…</div>;
+  if (err) return <div className="screen"><div className="err">{err}</div><button className="ghost" onClick={load}>Retry</button></div>;
+  if (!data) return <div className="screen muted center">Loading…</div>;
   const s = data.stats;
   const card = (i, extra = {}) => <ItemCard key={i.id} item={i} lane={laneById.get(i.lane_id)} onChange={changed} {...extra} />;
   const ev = (e) => (
     <div key={e.id} className="event">
-      <span className="ev-time">{e.all_day ? "Heldag" : time(e.start_at)}</span>
+      <span className="ev-time">{e.all_day ? "All day" : time(e.start_at)}</span>
       <span className="ev-title">{e.title}{e.location ? ` @ ${e.location}` : ""}</span>
       <span className="muted small">{e.calendar}</span>
     </div>
@@ -74,48 +74,48 @@ export default function Today({ lanes, refreshKey, onChange }) {
   return (
     <div className="screen">
       <div className="stats">
-        <div><b>🔥 {s?.streak ?? "–"}</b><span>dagar i rad</span></div>
-        <div><b>{s?.this_week?.pct ?? "–"}{s?.this_week?.pct != null ? "%" : ""}</b><span>denna vecka</span></div>
-        <div><b>{s?.done_this_week ?? "–"}</b><span>klart</span></div>
+        <div><b>🔥 {s?.streak ?? "–"}</b><span>day streak</span></div>
+        <div><b>{s?.this_week?.pct ?? "–"}{s?.this_week?.pct != null ? "%" : ""}</b><span>this week</span></div>
+        <div><b>{s?.done_this_week ?? "–"}</b><span>done</span></div>
       </div>
 
       {(data.emails > 0 || data.unsorted > 0 || data.mail.drafts > 0) && (
         <div className="banner">
           {data.mail.on ? (
             <div>
-              <div>✉ {data.mail.important} viktiga{data.mail.urgent ? ` (${data.mail.urgent} brådskande)` : ""} · {data.mail.drafts} {data.mail.drafts === 1 ? "utkast" : "utkast"} klara · {data.mail.noise} skräp{data.mail.unsorted ? ` · ${data.mail.unsorted} osorterade` : ""}</div>
+              <div>✉ {data.mail.important} important{data.mail.urgent ? ` (${data.mail.urgent} urgent)` : ""} · {data.mail.drafts} draft{data.mail.drafts === 1 ? "" : "s"} ready · {data.mail.noise} noise{data.mail.unsorted ? ` · ${data.mail.unsorted} still to sort` : ""}</div>
               {data.mail.list.map((m) => (
                 <div key={m.id} className="small" style={{ marginTop: 4 }}>
                   {m.importance === "urgent" ? "🔴" : "🟠"} <b>{m.from_name || m.from_address || "?"}</b>: {m.summary}
                 </div>
               ))}
-              {data.mail.drafts > 0 && <div className="muted small" style={{ marginTop: 4 }}>Utkasten ligger i Outlook → Utkast. Kolla och skicka själv.</div>}
+              {data.mail.drafts > 0 && <div className="muted small" style={{ marginTop: 4 }}>Drafts are in Outlook → Drafts. Check and send them yourself.</div>}
             </div>
           ) : (
-            data.emails > 0 && <div>✉ {data.emails} mejl väntar{data.flagged ? ` (${data.flagged} flaggade)` : ""}. Säg "kolla mejlen" under Prata.</div>
+            data.emails > 0 && <div>✉ {data.emails} emails waiting{data.flagged ? ` (${data.flagged} flagged)` : ""}. Say "check my mail" in Talk.</div>
           )}
-          {data.unsorted > 0 && <div>📝 {data.unsorted} osorterade anteckningar. Säg "sortera mina anteckningar" under Prata.</div>}
+          {data.unsorted > 0 && <div>📝 {data.unsorted} unsorted notes. Say "sort my notes" in Talk.</div>}
         </div>
       )}
 
       <section>
-        <h3>Idag</h3>
+        <h3>Today</h3>
         {data.calToday.map(ev)}
         {data.today.map((i) => card(i))}
-        {!data.calToday.length && !data.today.length && <p className="muted">Inget mer idag. 🌱</p>}
+        {!data.calToday.length && !data.today.length && <p className="muted">Nothing else today. 🌱</p>}
       </section>
 
-      {data.overdue.length > 0 && <section><h3 className="amber">Sen ({data.overdue.length})</h3>{data.overdue.map((i) => card(i))}</section>}
-      {data.replies.length > 0 && <section><h3>Svar att skicka</h3>{data.replies.map((i) => card(i))}</section>}
+      {data.overdue.length > 0 && <section><h3 className="amber">Overdue ({data.overdue.length})</h3>{data.overdue.map((i) => card(i))}</section>}
+      {data.replies.length > 0 && <section><h3>Replies to send</h3>{data.replies.map((i) => card(i))}</section>}
 
       {(data.week.length > 0 || data.calWeek.length > 0) && (
         <section>
-          <h3>Kommande 7 dagar</h3>
+          <h3>Next 7 days</h3>
           {[...data.calWeek.map((e) => ({ at: Date.parse(e.start_at), el: <div key={e.id} className="event"><span className="ev-time">{dayLabel(e.start_at)}{e.all_day ? "" : ` ${time(e.start_at)}`}</span><span className="ev-title">{e.title}</span><span className="muted small">{e.calendar}</span></div> })),
             ...data.week.map((i) => ({ at: Date.parse(i.due_at), el: card(i) }))].sort((a, b) => a.at - b.at).map((x) => x.el)}
         </section>
       )}
-      <button className="ghost center-block" onClick={() => api("calendar_sync").then(load).catch((e) => setErr(e.message))}>↻ Uppdatera kalendern</button>
+      <button className="ghost center-block" onClick={() => api("calendar_sync").then(load).catch((e) => setErr(e.message))}>↻ Refresh calendar</button>
     </div>
   );
 }

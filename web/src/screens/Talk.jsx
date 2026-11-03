@@ -26,7 +26,7 @@ export default function Talk({ onSaved }) {
   const typeRef = useRef(null);
   const endRef = useRef(null);
   const sv = lang.startsWith("sv");
-  const t = (s, e) => (sv ? s : e);
+  const t = (_sv, en) => en; // UI is English; what VIC says and Jarvis answers keep their own language
   const recordable = canRecord() && !!stt;
 
   useEffect(() => {
@@ -131,11 +131,7 @@ export default function Talk({ onSaved }) {
   return (
     <div className="screen talk">
       <div className="talk-top">
-        <div className="lang-toggle">
-          {["sv-SE", "en-US"].map((l) => (
-            <button key={l} className={lang === l ? "on" : ""} onClick={() => switchLang(l)}>{l === "sv-SE" ? "Svenska" : "English"}</button>
-          ))}
-        </div>
+        <span />
         {messages.length > 0 && <button className="ghost small" onClick={newTopic}>{t("Nytt ämne", "New topic")}</button>}
       </div>
 

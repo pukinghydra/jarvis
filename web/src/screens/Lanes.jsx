@@ -52,7 +52,7 @@ export default function Lanes({ lanes, reloadLanes, refreshKey, onChange }) {
     try { must(await supabase.from("lanes").update(patch).eq("id", l.id)); reloadLanes(); } catch (e) { setErr(e.message); }
   };
   const newLane = async () => {
-    const name = window.prompt("Namn på nytt område");
+    const name = window.prompt("New lane name");
     if (!name?.trim()) return;
     const slug = name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30) || `lane-${Date.now()}`;
     try {
@@ -69,7 +69,7 @@ export default function Lanes({ lanes, reloadLanes, refreshKey, onChange }) {
             {l.name} <span className="count">{counts[l.id] ?? 0}</span>
           </button>
         ))}
-        <button className="chip ghost" onClick={() => setEdit(!edit)}>{edit ? "Klar" : "Ändra områden"}</button>
+        <button className="chip ghost" onClick={() => setEdit(!edit)}>{edit ? "Done" : "Edit lanes"}</button>
       </div>
 
       {edit && (
@@ -80,14 +80,14 @@ export default function Lanes({ lanes, reloadLanes, refreshKey, onChange }) {
               <input className="input" defaultValue={l.name} onBlur={(e) => e.target.value.trim() && e.target.value !== l.name && saveLane(l, { name: e.target.value.trim() })} />
             </div>
           ))}
-          <button className="ghost" onClick={newLane}>+ Nytt område</button>
-          <p className="muted small">Jarvis hittar området även om du byter namn.</p>
+          <button className="ghost" onClick={newLane}>+ New lane</button>
+          <p className="muted small">Lane keys (for Claude) stay the same when you rename.</p>
         </div>
       )}
 
       {lane && (
         <div className="quick-add" style={{ borderColor: lane.color }}>
-          <input className="input" placeholder={lane.slug === "buy" ? "Vad ska köpas (t.ex. ullrockar)" : `Lägg till i ${lane.name}`} value={form.title}
+          <input className="input" placeholder={lane.slug === "buy" ? "What to buy (e.g. wool coats)" : `Add to ${lane.name}`} value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })} onKeyDown={(e) => e.key === "Enter" && add()} />
           {lane.slug !== "buy" && (
             <div className="row">
@@ -95,13 +95,13 @@ export default function Lanes({ lanes, reloadLanes, refreshKey, onChange }) {
               <input className="input" type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} />
             </div>
           )}
-          <button className="primary" onClick={add} disabled={!form.title.trim()}>Lägg till</button>
+          <button className="primary" onClick={add} disabled={!form.title.trim()}>Add</button>
         </div>
       )}
 
       {err && <div className="err">{err}</div>}
       {items.map((i) => <ItemCard key={i.id} item={i} lane={lane} checklist={lane?.slug === "buy"} onChange={() => { load(); onChange?.(); }} />)}
-      {!items.length && <p className="muted center">Tomt här. 🌱</p>}
+      {!items.length && <p className="muted center">Nothing here. 🌱</p>}
     </div>
   );
 }

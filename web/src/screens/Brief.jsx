@@ -23,10 +23,10 @@ export default function Brief() {
   return (
     <div className="screen">
       <div className="row">
-        <button className="ghost" onClick={rebuild} disabled={busy}>{busy ? "Bygger…" : "↻ Nu"}</button>
+        <button className="ghost" onClick={rebuild} disabled={busy}>{busy ? "Building…" : "↻ Now"}</button>
       </div>
       {err && <div className="err">{err}</div>}
-      {b ? <Markdown text={b.markdown} /> : <p className="muted center">Ingen brief än. Den kommer 09:30, eller tryck ↻ Nu.</p>}
+      {b ? <Markdown text={b.markdown} /> : <p className="muted center">No brief yet. It arrives at 09:30, or tap ↻ Now.</p>}
       {briefs.length > 1 && (
         <div className="chips">
           {briefs.map((x, n) => <button key={x.brief_date} className={`chip${n === idx ? " on" : ""}`} onClick={() => setIdx(n)}>{x.brief_date.slice(5)}{x.kind === "weekly" ? " ★" : ""}</button>)}
