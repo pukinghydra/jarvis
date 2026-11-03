@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, supabase, must } from "../lib/supabase.js";
 import { when } from "../lib/time.js";
+import EmailSheet from "./EmailSheet.jsx";
 
 const RECUR = { daily: "every day", weekdays: "weekdays", weekly: "every week", monthly: "every month", yearly: "every year" };
 
@@ -12,6 +13,7 @@ export default function ItemCard({ item, lane, onChange, checklist }) {
   const [err, setErr] = useState("");
   const [more, setMore] = useState(false);
   const [cheer, setCheer] = useState(false);
+  const [mailOpen, setMailOpen] = useState(false);
   const color = lane?.color ?? "#64748B";
   const overdue = item.due_at && Date.parse(item.due_at) < Date.now() && !item.all_day;
 
@@ -65,6 +67,7 @@ export default function ItemCard({ item, lane, onChange, checklist }) {
           {item.location && <span>@ {item.location}</span>}
         </div>
         {item.notes && <div className="notes">{item.notes}</div>}
+        {item.email_id && <button className="ghost small" onClick={() => setMailOpen(true)}>📧 Read the email</button>}
         {err && <div className="err">{err}</div>}
         {more && (
           <div className="row">
@@ -78,6 +81,7 @@ export default function ItemCard({ item, lane, onChange, checklist }) {
         <button className="ghost small" onClick={skip} disabled={busy}>Skip</button>
         <button className="ghost small" onClick={() => setMore(!more)} aria-label="More">⋯</button>
       </div>
+      {mailOpen && <EmailSheet id={item.email_id} onClose={() => setMailOpen(false)} onChange={onChange} />}
     </div>
   );
 }

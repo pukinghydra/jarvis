@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, supabase, must } from "../lib/supabase.js";
 import { addDaysStr, dayLabel, startOfDay, time, todayStr } from "../lib/time.js";
 import ItemCard from "../components/ItemCard.jsx";
+import EmailSheet from "../components/EmailSheet.jsx";
 
 // Jarvis's own email sorting (only when a Claude API key is set): counts like
 // the brief's "N important (M urgent) · K drafts ready · X noise".
@@ -24,6 +25,7 @@ function mailSummary(rows) {
 export default function Today({ lanes, refreshKey, onChange }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
+  const [openEmail, setOpenEmail] = useState(null);
   const laneById = new Map(lanes.map((l) => [l.id, l]));
 
   const load = async () => {
@@ -85,9 +87,9 @@ export default function Today({ lanes, refreshKey, onChange }) {
             <div>
               <div>✉ {data.mail.important} important{data.mail.urgent ? ` (${data.mail.urgent} urgent)` : ""} · {data.mail.drafts} draft{data.mail.drafts === 1 ? "" : "s"} ready · {data.mail.noise} noise{data.mail.unsorted ? ` · ${data.mail.unsorted} still to sort` : ""}</div>
               {data.mail.list.map((m) => (
-                <div key={m.id} className="small" style={{ marginTop: 4 }}>
-                  {m.importance === "urgent" ? "🔴" : "🟠"} <b>{m.from_name || m.from_address || "?"}</b>: {m.summary}
-                </div>
+                <button key={m.id} className="mail-row small" onClick={() => setOpenEmail(m.id)}>
+                  {m.importance === "urgent" ? "🔴" : "🟠"} <b>{m.from_name || m.from_address || "?"}</b>: {m.summary} <span className="muted">›</span>
+                </button>
               ))}
               {data.mail.drafts > 0 && <div className="muted small" style={{ marginTop: 4 }}>Drafts are in Outlook → Drafts. Check and send them yourself.</div>}
             </div>
@@ -116,6 +118,7 @@ export default function Today({ lanes, refreshKey, onChange }) {
         </section>
       )}
       <button className="ghost center-block" onClick={() => api("calendar_sync").then(load).catch((e) => setErr(e.message))}>↻ Refresh calendar</button>
+      {openEmail && <EmailSheet id={openEmail} onClose={() => setOpenEmail(null)} onChange={changed} />}
     </div>
   );
 }
