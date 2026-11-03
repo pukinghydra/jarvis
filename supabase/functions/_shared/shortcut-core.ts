@@ -43,3 +43,21 @@ export function answerText(reply: string, actions: { summary?: string; ok?: bool
   const done = actions.filter((a) => a.summary).map((a) => `${a.ok === false ? "✗" : "✓"} ${a.summary}`);
   return [reply.trim() || "Done.", ...(done.length ? ["", ...done] : [])].join("\n");
 }
+
+// A recording from the Shortcuts app ("Record Audio" → m4a). Its type can
+// arrive empty or as application/octet-stream, so the file's first bytes
+// decide: "ftyp" = MP4/M4A, "RIFF…WAVE" = WAV, "OggS" = Ogg, ID3/0xFFEx = MP3,
+// 0x1A45DFA3 = WebM.
+export async function guessAudioType(f: Blob, name = ""): Promise<string> {
+  const t = (f.type || "").toLowerCase().split(";")[0].trim();
+  if (t.startsWith("audio/") || t === "video/mp4" || t === "video/webm") return t;
+  const b = new Uint8Array(await f.slice(0, 12).arrayBuffer());
+  const s = (o: number, n: number) => String.fromCharCode(...b.slice(o, o + n));
+  if (s(4, 4) === "ftyp") return "audio/mp4";
+  if (s(0, 4) === "RIFF" && s(8, 4) === "WAVE") return "audio/wav";
+  if (s(0, 4) === "OggS") return "audio/ogg";
+  if (s(0, 3) === "ID3" || (b[0] === 0xff && (b[1] & 0xe0) === 0xe0)) return "audio/mpeg";
+  if (b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return "audio/webm";
+  const ext = name.toLowerCase().split(".").pop() ?? "";
+  return ({ m4a: "audio/mp4", mp4: "audio/mp4", wav: "audio/wav", mp3: "audio/mpeg", ogg: "audio/ogg", webm: "audio/webm", caf: "" } as Record<string, string>)[ext] ?? "";
+}

@@ -38,3 +38,13 @@ test("shortcut: answer lists what was done", () => {
     "Klart.\n\n✓ Added to Arbete: Tandläkare tor 14:00\n✗ Web search failed");
   eq(answerText("", []), "Done.");
 });
+
+test("shortcut: recording type from its first bytes when the type is missing", async () => {
+  const { guessAudioType } = await import("../supabase/functions/_shared/shortcut-core.ts");
+  const m4a = new Blob([new Uint8Array([0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70, 0x4d, 0x34, 0x41, 0x20])], { type: "application/octet-stream" });
+  eq(await guessAudioType(m4a), "audio/mp4");
+  const wav = new Blob([new TextEncoder().encode("RIFF\0\0\0\0WAVE")]);
+  eq(await guessAudioType(wav), "audio/wav");
+  eq(await guessAudioType(new Blob(["x"], { type: "audio/x-m4a" })), "audio/x-m4a");
+  eq(await guessAudioType(new Blob(["????????????"]), "Recording.m4a"), "audio/mp4");
+});
