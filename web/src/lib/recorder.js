@@ -17,11 +17,28 @@ export function pickMime() {
   return "";
 }
 
+// One microphone stream for as long as Jarvis is open: iPhone asks for mic
+// access each time a page calls getUserMedia afresh, so recordings reuse the
+// same stream. It is released when the app goes to the background (so the
+// mic isn't held), and taken again on the next tap.
+let shared = null;
+async function micStream() {
+  if (shared && shared.getAudioTracks().some((t) => t.readyState === "live")) return shared;
+  shared = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  return shared;
+}
+export function releaseMic() {
+  if (shared) { shared.getTracks().forEach((t) => t.stop()); shared = null; }
+}
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") releaseMic(); });
+}
+
 // Starts recording. onTick(seconds) and onLevel(0..1) drive the timer and the
 // level meter; onLimit fires when the 10-minute cap stops it.
 // Returns { stop(): Promise<Blob>, cancel() }.
 export async function startRecording({ onTick, onLevel, onLimit } = {}) {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  const stream = await micStream();
   const mime = pickMime();
   const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
   const chunks = [];
@@ -66,7 +83,7 @@ export async function startRecording({ onTick, onLevel, onLimit } = {}) {
     clearInterval(tick);
     cancelAnimationFrame(raf);
     try { ctx?.close(); } catch { /* closed */ }
-    stream.getTracks().forEach((t) => t.stop());
+    // The stream stays open for the next recording (see micStream).
   };
 
   rec.start(1000); // a chunk every second, so nothing is lost if iOS hiccups
