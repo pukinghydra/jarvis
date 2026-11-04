@@ -180,18 +180,36 @@ export function lastVerbState(v: unknown): Answered | null {
   return null;
 }
 
-export type SentRef = { conversation_id: string | null; sent_at: string | null };
+export type SentRef = { conversation_id: string | null; sent_at: string | null; subject?: string | null; to?: string[] };
+
+// "Re: SV: Fwd:  Lån SEB" -> "lån seb": the subject without reply/forward
+// prefixes, for matching a reply sent from the phone's mail app (a new
+// message, so Outlook may give it a new conversation id).
+export function baseSubject(s: unknown): string {
+  let t = String(s ?? "").trim();
+  for (let i = 0; i < 5; i++) {
+    const n = t.replace(/^(re|sv|aw|ant|fw|fwd|vs|vb|wg)\s*(\[\d+\])?\s*:\s*/i, "");
+    if (n === t) break;
+    t = n;
+  }
+  return t.toLowerCase().replace(/\s+/g, " ").trim();
+}
 
 export function answeredState(
-  email: { conversation_id: string | null; received_at: string | null },
+  email: { conversation_id: string | null; received_at: string | null; subject?: string | null; from_address?: string | null },
   lastVerb: unknown,
   sent: SentRef[],
 ): Answered | null {
   const v = lastVerbState(lastVerb);
   if (v) return v;
   const received = Date.parse(String(email.received_at ?? ""));
-  if (!email.conversation_id || !Number.isFinite(received)) return null;
-  return sent.some((s) => s.conversation_id === email.conversation_id && Date.parse(String(s.sent_at ?? "")) > received) ? "replied" : null;
+  if (!Number.isFinite(received)) return null;
+  const after = (s: SentRef) => Date.parse(String(s.sent_at ?? "")) > received;
+  if (email.conversation_id && sent.some((s) => s.conversation_id === email.conversation_id && after(s))) return "replied";
+  // Same sender, same subject (prefixes aside), sent after it arrived.
+  const subj = baseSubject(email.subject), from = String(email.from_address ?? "").trim().toLowerCase();
+  if (subj.length < 3 || !from) return null;
+  return sent.some((s) => after(s) && baseSubject(s.subject) === subj && (s.to ?? []).some((a) => a.trim().toLowerCase() === from)) ? "replied" : null;
 }
 
 // What to clean up once an email is answered or turns out to be noise.

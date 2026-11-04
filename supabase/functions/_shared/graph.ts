@@ -198,10 +198,13 @@ export async function inboxState(since: Date): Promise<Map<string, { conversatio
 }
 
 // What VIC sent since `since`: conversation + time only (answered check).
-export async function sentSince(since: Date): Promise<{ conversation_id: string | null; sent_at: string | null }[]> {
-  const q = new URLSearchParams({ $filter: `sentDateTime ge ${since.toISOString()}`, $orderby: "sentDateTime desc", $top: "100", $select: "conversationId,sentDateTime" });
+export async function sentSince(since: Date): Promise<{ conversation_id: string | null; sent_at: string | null; subject: string | null; to: string[] }[]> {
+  const q = new URLSearchParams({ $filter: `sentDateTime ge ${since.toISOString()}`, $orderby: "sentDateTime desc", $top: "100", $select: "conversationId,sentDateTime,subject,toRecipients" });
   const rows = await listAll(`/me/mailFolders/sentitems/messages?${q}`, {});
-  return rows.map((m: any) => ({ conversation_id: m.conversationId ?? null, sent_at: m.sentDateTime ?? null }));
+  return rows.map((m: any) => ({
+    conversation_id: m.conversationId ?? null, sent_at: m.sentDateTime ?? null, subject: m.subject ?? null,
+    to: (m.toRecipients ?? []).map((r: any) => String(r?.emailAddress?.address ?? "")).filter(Boolean),
+  }));
 }
 
 // Is this message (still) a draft? null when it no longer exists.

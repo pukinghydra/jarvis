@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, supabase, must } from "../lib/supabase.js";
 import { when } from "../lib/time.js";
 import EmailSheet from "./EmailSheet.jsx";
+import { mailtoForEmail } from "../lib/mailto.js";
 
 const RECUR = { daily: "every day", weekdays: "weekdays", weekly: "every week", monthly: "every month", yearly: "every year" };
 
@@ -14,8 +15,21 @@ export default function ItemCard({ item, lane, onChange, checklist }) {
   const [more, setMore] = useState(false);
   const [cheer, setCheer] = useState(false);
   const [mailOpen, setMailOpen] = useState(false);
+  const [mail, setMail] = useState(null);
   const color = lane?.color ?? "#64748B";
   const overdue = item.due_at && Date.parse(item.due_at) < Date.now() && !item.all_day;
+
+  // Items made from an email: load it now, so "Open in Mail" is a plain
+  // link (iPhone only opens the mail app straight from a tap).
+  useEffect(() => {
+    if (!item.email_id) return;
+    let live = true;
+    supabase.from("emails").select("from_name, from_address, subject, received_at, body, preview, draft_text, draft_language")
+      .eq("id", item.email_id).maybeSingle()
+      .then(({ data }) => { if (live && data) setMail({ ...data, body: data.body || data.preview }); });
+    return () => { live = false; };
+  }, [item.email_id]);
+  const mailto = mailtoForEmail(mail);
 
   const run = async (fn, celebrate = false) => {
     setBusy(true); setErr("");
@@ -67,7 +81,12 @@ export default function ItemCard({ item, lane, onChange, checklist }) {
           {item.location && <span>@ {item.location}</span>}
         </div>
         {item.notes && <div className="notes">{item.notes}</div>}
-        {item.email_id && <button className="ghost small" onClick={() => setMailOpen(true)}>📧 Read the email</button>}
+        {item.email_id && (
+          <div className="row">
+            {mailto && <a className="primary button-link small" href={mailto}>✉️ Open in Mail (reply written)</a>}
+            <button className="ghost small" onClick={() => setMailOpen(true)}>📧 {mailto ? "Read here" : "Read the email"}</button>
+          </div>
+        )}
         {err && <div className="err">{err}</div>}
         {more && (
           <div className="row">

@@ -1,6 +1,6 @@
 import { suite, eq, ok } from "./t.ts";
 import {
-  answeredState, appendRule, applyVintedRule, bulkHeaders, bulkSender, cleanupPlan, deleteJarvisDraft, DEFAULT_MAIL_RULES,
+  answeredState, appendRule, baseSubject, applyVintedRule, bulkHeaders, bulkSender, cleanupPlan, deleteJarvisDraft, DEFAULT_MAIL_RULES,
   hardNoise, isVinted, lastVerbState, normalizeSender, notificationSender, vintedRemind, vintedReturnHint,
 } from "../supabase/functions/_shared/mail-rules-core.ts";
 import { triageUser, validateTriage } from "../supabase/functions/_shared/email-triage-core.ts";
@@ -132,6 +132,17 @@ test("answered: a Sent Items message in the same conversation AFTER it arrived",
   eq(answeredState(e, null, [{ conversation_id: "C1", sent_at: "2026-11-02T09:00:00Z" }]), null, "sent before it arrived = not an answer to it");
   eq(answeredState(e, null, [{ conversation_id: "C2", sent_at: "2026-11-02T11:00:00Z" }]), null, "other conversation");
   eq(answeredState({ conversation_id: null, received_at: e.received_at }, null, [{ conversation_id: null, sent_at: "2026-11-02T11:00:00Z" }]), null, "no conversation id: never matched");
+});
+test("answered from the phone's mail app: same sender + same subject, sent after it arrived", () => {
+  eq(baseSubject("Re: SV: Fwd:  Lån SEB eller   Handelsbanken"), "lån seb eller handelsbanken");
+  eq(baseSubject("SV: RE[2]: hej"), "hej");
+  const e = { conversation_id: "C1", received_at: "2026-11-02T10:00:00Z", subject: "lån seb eller handelsbanken", from_address: "Johanna.A@nabo.se" };
+  const sent = (over: any) => [{ conversation_id: "NEW", sent_at: "2026-11-02T11:00:00Z", subject: "Re: lån seb eller handelsbanken", to: ["johanna.a@nabo.se"], ...over }];
+  eq(answeredState(e, null, sent({})), "replied", "new conversation id, matched by subject + recipient");
+  eq(answeredState(e, null, sent({ to: ["someone@else.se"] })), null, "other recipient");
+  eq(answeredState(e, null, sent({ subject: "Re: något annat" })), null, "other subject");
+  eq(answeredState(e, null, sent({ sent_at: "2026-11-02T09:00:00Z" })), null, "sent before it arrived");
+  eq(answeredState({ ...e, subject: "Re:" }, null, sent({ subject: "Re:" })), null, "empty subject never matches");
 });
 test("cleanup plan: answered closes, noise removes Jarvis's to-dos; drafts only when Jarvis stored one", () => {
   eq(cleanupPlan({ draft_id: "D1" }, "answered"), { deleteDraft: true, closeSendReply: true, deleteAutoItems: false });

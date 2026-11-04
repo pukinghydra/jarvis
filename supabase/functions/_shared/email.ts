@@ -60,7 +60,7 @@ export async function scanEmails(now: Date, opts: { notify?: boolean } = {}) {
 // emails stored before Jarvis read those.
 export async function recheckOpen(now: Date) {
   const open = must(
-    await sb.from("emails").select("id, graph_id, conversation_id, received_at, status, draft_id, bulk_reason, last_verb")
+    await sb.from("emails").select("id, graph_id, conversation_id, received_at, status, draft_id, bulk_reason, last_verb, subject, from_address")
       .in("status", ["new", "drafted"]).gte("received_at", new Date(now.getTime() - 30 * 86400_000).toISOString())
       .order("received_at", { ascending: true }).limit(300),
     "open emails",
@@ -83,7 +83,7 @@ export async function recheckOpen(now: Date) {
       updated++;
     }
     const ans = answeredState(
-      { conversation_id: (patch.conversation_id as string) ?? e.conversation_id, received_at: e.received_at },
+      { conversation_id: (patch.conversation_id as string) ?? e.conversation_id, received_at: e.received_at, subject: e.subject, from_address: e.from_address },
       s ? s.last_verb : e.last_verb,
       sent,
     );

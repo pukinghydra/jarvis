@@ -147,11 +147,14 @@ h3.amber { color: var(--amber); }
 @keyframes recpulse { 0%, 100% { opacity: .25; } 50% { opacity: .9; } }
 
 /* Email sheet: the email as it arrived, then Jarvis's draft */
-.email-sheet { max-height: 88vh; overflow-y: auto; touch-action: pan-y; }
-.sheet-top { display: flex; justify-content: space-between; align-items: center; }
+.email-sheet { max-height: 88vh; overflow-y: auto; touch-action: pan-y; padding-top: 0; }
+/* The close bar stays on screen while the popup scrolls. */
+.sheet-top { display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 2; background: #101624; padding: 10px 0 8px; }
+.close-x { width: 44px; height: 44px; border-radius: 22px; border: 0; background: #263049; color: #fff; font-size: 20px; line-height: 44px; padding: 0; }
 .email-subject { font-weight: 700; font-size: 17px; }
 .email-summary { margin-top: 6px; font-size: 14px; }
 .email-body { white-space: pre-wrap; word-break: break-word; background: var(--card); border-radius: 10px; padding: 10px 12px; font-size: 15px; line-height: 1.45; }
 .email-draft { display: grid; gap: 6px; border-left: 3px solid #8B5CF6; padding-left: 8px; }
 .button-link { display: inline-block; text-decoration: none; text-align: center; padding: 10px 14px; border-radius: 10px; }
+.button-link.small { padding: 7px 12px; font-size: 14px; }
 .mail-row { display: block; width: 100%; text-align: left; background: none; border: 0; color: inherit; padding: 4px 0; font: inherit; }

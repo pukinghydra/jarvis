@@ -1,8 +1,8 @@
 import { useRef } from "react";
 
 // Swipe left to close a popup. Spread the returned props on the popup's
-// panel: it follows the finger while you drag left and closes past ~25% of
-// its width (or a quick flick); otherwise it snaps back. Vertical scrolling
+// panel: it follows the finger while you drag left and closes past 90px (or
+// 25% of a narrow panel, or a quick flick); otherwise it snaps back. Vertical scrolling
 // inside the popup is left alone.
 export function useSwipeClose(onClose) {
   const s = useRef(null);
@@ -30,8 +30,8 @@ export function useSwipeClose(onClose) {
     s.current = null;
     if (!st || !st.horizontal) return;
     const node = el(e);
-    const fast = st.dx < -40 && Date.now() - st.t < 250;
-    if (st.dx < -node.offsetWidth * 0.25 || fast) {
+    const fast = st.dx < -30 && Date.now() - st.t < 300;
+    if (st.dx < -Math.min(90, node.offsetWidth * 0.25) || fast) {
       node.style.transition = "transform .15s ease-out, opacity .15s ease-out";
       node.style.transform = "translateX(-110%)";
       node.style.opacity = "0";
