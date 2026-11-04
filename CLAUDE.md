@@ -28,3 +28,8 @@ inside a sentence.
 
 <!-- Mirrors the "always-on" rules of the i-have-adhd plugin
      (https://github.com/ayghri/i-have-adhd, MIT). Manual re-assert: /i-have-adhd -->
+
+# Jarvis app conventions (VIC's rules)
+
+- Every popup / sheet closes with a swipe left: use `useSwipeClose` from `web/src/lib/swipe.js` on the panel, plus a visible ✕.
+- App UI text is English; content (emails, titles, notes, drafts) stays in its own language and is never translated.

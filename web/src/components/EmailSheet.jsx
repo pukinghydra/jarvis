@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase, must } from "../lib/supabase.js";
 import { dayLabel, time } from "../lib/time.js";
+import { useSwipeClose } from "../lib/swipe.js";
 
 // One email exactly as it arrived (original language, never translated),
 // with Jarvis's draft reply under it. Opens over the current screen.
@@ -8,6 +9,7 @@ export default function EmailSheet({ id, onClose, onChange }) {
   const [e, setE] = useState(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const swipe = useSwipeClose(onClose);
 
   useEffect(() => {
     let live = true;
@@ -28,8 +30,9 @@ export default function EmailSheet({ id, onClose, onChange }) {
 
   return (
     <div className="sheet-bg" onClick={onClose}>
-      <div className="sheet email-sheet" onClick={(x) => x.stopPropagation()}>
+      <div className="sheet email-sheet" onClick={(x) => x.stopPropagation()} {...swipe}>
         <div className="sheet-top">
+          <span className="muted small">← swipe left to close</span>
           <button className="ghost small" onClick={onClose}>✕ Close</button>
         </div>
         {err && <div className="err">{err}</div>}
