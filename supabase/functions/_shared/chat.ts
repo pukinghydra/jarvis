@@ -11,6 +11,7 @@ import { anthropic, FALLBACK_OK, hasClaude, model } from "./claude.ts";
 import { config } from "./config.ts";
 import { sb, must, getSetting, HttpError } from "./db.ts";
 import { buildTools, type ItemSource } from "./tools.ts";
+import { toolName } from "./tool-defs.ts";
 import { capture } from "./capture.ts";
 import {
   apiTools, chatEffort, CHAT_MAX_TOKENS, CHAT_SYSTEM, detectLang, MEMORY_CAP, memoryBlock, recapText, runLoop,
@@ -106,7 +107,7 @@ export async function chatSay(text: string, lang: string | null, source: ItemSou
   const tools = buildTools({ source });
   const byName = new Map(tools.map((t) => [t.name, t]));
   const run = (name: string, args: Record<string, unknown>) => {
-    const t = byName.get(name);
+    const t = byName.get(toolName(name));
     if (!t) throw new Error(`Unknown tool ${name}`);
     return t.handler(args);
   };

@@ -151,8 +151,8 @@ function handlers(source: ItemSource): Record<ToolName, Handler> {
       ].sort((x, y) => x.at - y.at);
       return rows.length ? rows.map((r) => r.text).join("\n") : `Nothing in the next ${days} days.`;
     },
-    add: async (a) => insertItems(a.items, source),
-    update: async (a) => {
+    add_task: async (a) => insertItems(a.items, source),
+    update_task: async (a) => {
       const item = await resolveItem(String(a.id ?? ""));
       const ls = await lanes();
       const has = (k: string) => Object.prototype.hasOwnProperty.call(a, k);
@@ -179,17 +179,17 @@ function handlers(source: ItemSource): Record<ToolName, Handler> {
       const saved = must(await sb.from("items").update(patch).eq("id", item.id).select(ITEM_COLS), "update item") ?? [];
       return `Updated: ${line(saved[0] ?? item, new Map(ls.map((l) => [l.id, l.name])))}`;
     },
-    delete: async (a) => {
+    delete_task: async (a) => {
       const item = await resolveItem(String(a.id ?? ""));
       must(await sb.from("items").delete().eq("id", item.id), "delete item");
       return `Deleted: ${item.title}`;
     },
-    complete: async (a) => {
+    complete_task: async (a) => {
       const r = await completeItem(String(a.id ?? ""), { proof_url: a.proof_url ? String(a.proof_url) : null });
       return r.rolled ? `${r.message.split(". Next")[0]}. Next time: ${r.item?.due_at ? shortWhen(new Date(r.item.due_at), r.item.all_day) : "?"}` : r.message;
     },
-    skip: async (a) => (await skipItem(String(a.id ?? ""), String(a.reason ?? ""))).message,
-    lane: async (a) => {
+    skip_task: async (a) => (await skipItem(String(a.id ?? ""), String(a.reason ?? ""))).message,
+    lane_tasks: async (a) => {
       const ls = await lanes();
       const key = String(a.lane ?? "").toLowerCase();
       const l = ls.find((x) => x.slug === key || x.name.toLowerCase() === key);
@@ -200,7 +200,7 @@ function handlers(source: ItemSource): Record<ToolName, Handler> {
       const names = new Map(ls.map((x) => [x.id, x.name]));
       return rows.length ? `${l.name}:\n${rows.map((i: any) => line(i, names)).join("\n")}` : `${l.name}: empty`;
     },
-    search: async (a) => {
+    search_tasks: async (a) => {
       const q = String(a.query ?? "").replace(/[%,()]/g, " ").trim();
       if (!q) throw new Error("query is empty");
       const rows = must(await sb.from("items").select(ITEM_COLS).or(`title.ilike.%${q}%,notes.ilike.%${q}%`).order("created_at", { ascending: false }).limit(30), "search") ?? [];

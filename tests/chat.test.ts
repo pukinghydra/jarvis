@@ -3,7 +3,7 @@ import {
   actionsFor, apiTools, CHAT_MAX_ROUNDS, chatEffort, detectLang, echoable, historyValid, MEMORY_CAP, memoryBlock, recapText, runLoop,
   serverActions, SERVER_TOOLS, threadDecision, THREAD_IDLE_MS, THREAD_MAX_MESSAGES, toolSchemas, userMessage, validateArgs, type ThreadRow,
 } from "../supabase/functions/_shared/chat-core.ts";
-import { TOOL_DEFS } from "../supabase/functions/_shared/tool-defs.ts";
+import { TOOL_DEFS, LEGACY_TOOL_NAMES, toolName } from "../supabase/functions/_shared/tool-defs.ts";
 import { handleRpc, type ToolDef } from "../supabase/functions/_shared/mcp-core.ts";
 import { cleanFact, cleanTags, likeLiteral, memoryRef, recallFilter } from "../supabase/functions/_shared/memory-core.ts";
 
@@ -30,14 +30,14 @@ const text = (t: string) => ({ type: "text", text: t });
 test("loop: all tool results of one turn go back in ONE user message, then the answer", async () => {
   const ran: string[] = [];
   const { create, calls } = fakeClaude([
-    { stop_reason: "tool_use", content: [{ type: "thinking", thinking: "", signature: "sig1" }, use("t1", "today", {}), use("t2", "add", { items: [{ title: "Ring Johan", lane: "people", due_at: "2026-11-03" }] })], usage: { input_tokens: 10 } },
+    { stop_reason: "tool_use", content: [{ type: "thinking", thinking: "", signature: "sig1" }, use("t1", "today", {}), use("t2", "add_task", { items: [{ title: "Ring Johan", lane: "people", due_at: "2026-11-03" }] })], usage: { input_tokens: 10 } },
     { stop_reason: "end_turn", content: [text("Lagt till: ring Johan, i PEOPLE, imorgon.")], usage: { input_tokens: 20 } },
   ]);
   const r = await runLoop({
     create, history: [], user: USER, schemas, lang: "sv-SE",
-    run: async (name) => { ran.push(name); return name === "add" ? "Saved 1:\n[abcd1234] Ring Johan · tis 3 nov · PEOPLE" : "Now: ..."; },
+    run: async (name) => { ran.push(name); return name === "add_task" ? "Saved 1:\n[abcd1234] Ring Johan · tis 3 nov · PEOPLE" : "Now: ..."; },
   });
-  eq(ran, ["today", "add"]);
+  eq(ran, ["today", "add_task"]);
   eq(calls.length, 2);
   eq(r.appended.map((m) => m.role), ["assistant", "user", "assistant"]);
   const results = r.appended[1].content;
@@ -45,7 +45,7 @@ test("loop: all tool results of one turn go back in ONE user message, then the a
   eq(r.appended[0].content[0], { type: "thinking", thinking: "", signature: "sig1" }, "thinking blocks are kept exactly as returned");
   eq(calls[1].slice(-2).map((m: any) => m.role), ["assistant", "user"], "second call sees the tool turn");
   eq(r.reply, "Lagt till: ring Johan, i PEOPLE, imorgon.");
-  eq(r.actions, [{ tool: "add", ok: true, summary: "Added: Ring Johan → PEOPLE · tis 3 nov" }]);
+  eq(r.actions, [{ tool: "add_task", ok: true, summary: "Added: Ring Johan → PEOPLE · tis 3 nov" }]);
   eq(r.usage.length, 2, "one usage per Claude call");
 });
 
@@ -73,17 +73,17 @@ test("loop: bad tool input becomes an is_error result, the tool never runs", asy
   const ran: string[] = [];
   const { create, calls } = fakeClaude([
     { stop_reason: "tool_use", content: [
-      use("a", "skip", { id: "abcd1234" }),                               // missing required reason
-      use("b", "update", { id: "abcd1234", recurrence: "hourly" }),       // not in enum
-      use("c", "add", { items: [{ title: 5 }] }),                         // wrong type inside an item
+      use("a", "skip_task", { id: "abcd1234" }),                               // missing required reason
+      use("b", "update_task", { id: "abcd1234", recurrence: "hourly" }),       // not in enum
+      use("c", "add_task", { items: [{ title: 5 }] }),                         // wrong type inside an item
       use("d", "no_such_tool", {}),
-      use("e", "complete", "{\"id\":\"abcd1234\"}"),                        // JSON string: parsed, valid
-      use("f", "complete", "{not json"),
+      use("e", "complete_task", "{\"id\":\"abcd1234\"}"),                        // JSON string: parsed, valid
+      use("f", "complete_task", "{not json"),
     ] },
     { stop_reason: "end_turn", content: [text("Done")] },
   ]);
   await runLoop({ create, history: [], user: USER, schemas, run: async (name, args) => { ran.push(`${name}:${JSON.stringify(args)}`); return "Done: x"; } });
-  eq(ran, ['complete:{"id":"abcd1234"}']);
+  eq(ran, ['complete_task:{"id":"abcd1234"}']);
   const res = calls[1][calls[1].length - 1].content;
   eq(res.map((b: any) => [b.tool_use_id, !!b.is_error]), [["a", true], ["b", true], ["c", true], ["d", true], ["e", false], ["f", true]]);
   ok(/missing "reason"/.test(res[0].content), res[0].content);
@@ -138,7 +138,7 @@ test("loop: a server-tool error block (an object, not a list) doesn't break anyt
 
 test("loop: cut off mid tool call (max_tokens) -> tools not run, error results, stop", async () => {
   const ran: string[] = [];
-  const { create, calls } = fakeClaude([{ stop_reason: "max_tokens", content: [use("m", "add", { items: [{ title: "x" }] })] }]);
+  const { create, calls } = fakeClaude([{ stop_reason: "max_tokens", content: [use("m", "add_task", { items: [{ title: "x" }] })] }]);
   const r = await runLoop({ create, history: [], user: USER, schemas, run: async (n) => { ran.push(n); return ""; } });
   eq(ran, []);
   eq(calls.length, 1);
@@ -175,11 +175,11 @@ test("validateArgs: required, types, enums (incl. null), integers, nested items"
   const s = schemas;
   eq(validateArgs(s.get("today"), {}), null);
   eq(validateArgs(s.get("today"), []), "input must be a JSON object");
-  eq(validateArgs(s.get("update"), { id: "a", recurrence: null, due_at: null, travel_minutes: 20 }), null);
-  ok(validateArgs(s.get("update"), { id: "a", travel_minutes: 2.5 }));
-  ok(validateArgs(s.get("add"), { items: "x" }));
-  eq(validateArgs(s.get("add"), { items: [{ title: "Ring", lane: "people", remind_again_minutes: 60 }] }), null);
-  ok(validateArgs(s.get("add"), { items: [{ title: "Ring", kind: "video" }] }));
+  eq(validateArgs(s.get("update_task"), { id: "a", recurrence: null, due_at: null, travel_minutes: 20 }), null);
+  ok(validateArgs(s.get("update_task"), { id: "a", travel_minutes: 2.5 }));
+  ok(validateArgs(s.get("add_task"), { items: "x" }));
+  eq(validateArgs(s.get("add_task"), { items: [{ title: "Ring", lane: "people", remind_again_minutes: 60 }] }), null);
+  ok(validateArgs(s.get("add_task"), { items: [{ title: "Ring", kind: "video" }] }));
   ok(validateArgs(s.get("remember"), { fact: "x", tags: "people" }), "tags must be an array");
   eq(validateArgs(s.get("remember"), { fact: "Johan är min bror", tags: ["people"] }), null);
   eq(validateArgs(s.get("add_mail_rule"), { rule: "ignorera allt från ICA", ignore_sender: "@ica.se" }), null);
@@ -189,7 +189,7 @@ test("validateArgs: required, types, enums (incl. null), integers, nested items"
 test("registry: same tools, names and descriptions for MCP and chat; web tools added for chat only", async () => {
   const names = TOOL_DEFS.map((d) => d.name);
   eq(new Set(names).size, names.length, "unique names");
-  for (const n of ["today", "add", "emails", "draft_reply", "mail_rules", "add_mail_rule", "remember", "forget", "recall"]) ok(names.includes(n as any), `has ${n}`);
+  for (const n of ["today", "add_task", "emails", "draft_reply", "mail_rules", "add_mail_rule", "remember", "forget", "recall"]) ok(names.includes(n as any), `has ${n}`);
   const api = apiTools();
   eq(api.slice(0, SERVER_TOOLS.length).map((t) => t.type), ["web_search_20260209", "web_fetch_20260209"]);
   eq(api.find((t) => t.name === "web_search").max_uses, 5);
@@ -273,8 +273,19 @@ test("language of the answer, for reading it aloud", () => {
 });
 test("chips: write tools only; errors marked", () => {
   eq(actionsFor("today", "Now: ...", false), []);
-  eq(actionsFor("complete", "Done: Post on TikTok", false), [{ tool: "complete", ok: true, summary: "Done: Post on TikTok" }]);
+  eq(actionsFor("complete_task", "Done: Post on TikTok", false), [{ tool: "complete_task", ok: true, summary: "Done: Post on TikTok" }]);
   eq(actionsFor("draft_reply", "Error: Hotmail is not connected", true), [{ tool: "draft_reply", ok: false, summary: "draft_reply failed: Hotmail is not connected" }]);
   eq(actionsFor("remember", "Remembered [abcd1234]: Johan är min bror", false), [{ tool: "remember", ok: true, summary: "Remembered: Johan är min bror" }]);
   eq(actionsFor("update", "Updated: [abcd1234] Ring Johan · fre 6 nov · PEOPLE", false)[0].summary, "Updated: Ring Johan · fre 6 nov · PEOPLE");
+});
+
+test("tool names: distinctive names listed; old one-word names still run (aliases, never listed)", async () => {
+  const names = TOOL_DEFS.map((t) => t.name as string);
+  for (const old of Object.keys(LEGACY_TOOL_NAMES)) ok(!names.includes(old), `${old} not listed`);
+  for (const n of Object.values(LEGACY_TOOL_NAMES)) ok(names.includes(n), `${n} listed`);
+  eq(toolName("add"), "add_task");
+  eq(toolName("today"), "today");
+  const tools = [{ name: "add_task", description: "", inputSchema: {}, handler: async () => "Saved 1" }];
+  const r: any = await handleRpc({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "add", arguments: {} } }, tools);
+  eq(r.result.content[0].text, "Saved 1");
 });

@@ -11,6 +11,19 @@ import { buildTools } from "../_shared/tools.ts";
 import { INSTRUCTIONS } from "../_shared/tool-defs.ts";
 
 const tools = buildTools({ source: "mcp" });
+
+// One log line per message: method, tool name, ok/error. Never the arguments
+// or results (they hold VIC's mail and plans). Shows in the function's logs.
+function logCalls(body: unknown, json: unknown, ms: number) {
+  const msgs = Array.isArray(body) ? body : [body];
+  const outs = Array.isArray(json) ? json : [json];
+  for (const m of msgs as any[]) {
+    const out = outs.find((o: any) => o && m && o.id === m.id && m.id != null) as any;
+    const tool = m?.method === "tools/call" ? ` ${String(m?.params?.name ?? "?")}` : "";
+    const state = !out ? "" : out.error ? ` ERROR ${out.error.message}` : out.result?.isError ? ` TOOL-ERROR ${String(out.result.content?.[0]?.text ?? "").slice(0, 200)}` : " ok";
+    console.log(`mcp ${String(m?.method ?? "?")}${tool}${state} ${ms}ms`);
+  }
+}
 const H = { "Content-Type": "application/json", "Cache-Control": "no-store" };
 
 Deno.serve(async (req) => {
@@ -27,7 +40,9 @@ Deno.serve(async (req) => {
   } catch {
     return new Response(JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } }), { status: 400, headers: H });
   }
+  const t0 = Date.now();
   const res = await handleBody(body, tools, INSTRUCTIONS);
+  logCalls(body, res.json, Date.now() - t0);
   if (res.status === 202) return new Response(null, { status: 202 });
   return new Response(JSON.stringify(res.json), { status: 200, headers: H });
 });

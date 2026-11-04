@@ -9,7 +9,7 @@
 // thinking to the conversation, so nothing earlier is ever edited or
 // dropped; a long or stale thread is replaced by a fresh one instead.
 
-import { TOOL_DEFS } from "./tool-defs.ts";
+import { TOOL_DEFS, toolName } from "./tool-defs.ts";
 import { nowForPrompt } from "./time.ts";
 
 export const CHAT_MAX_ROUNDS = 8;
@@ -37,7 +37,7 @@ What you know:
 - Memories: the first message of a conversation lists what you remember about VIC. Use them. When VIC states a durable fact (people and who they are, preferences, recurring obligations, Thriftin facts, how he wants things done), save it with remember without asking, and fix a wrong one with forget then remember. One-off tasks are items, not memories.
 - Lanes: buy (stock to buy for Thriftin, his Vinted buy list), thriftin (the shop, posting, orders, parcels, returns), money (bills, VAT, Fortnox), people, life (trips, health, home, errands), inbox (email replies).
 - Repeating habits (e.g. Post on TikTok at 20:30, reminded again at 21:30 with remind_again_minutes) are closed with complete; no link or proof needed.
-- Sort by meaning, not wording: a meeting, appointment, call, dinner or anything happening at a time or on a day goes into the iPhone calendar (calendar_add_event, Arbete). Things to do or remember (ring X, buy, pay, send) are items via add, with a reminder when he gives a time. Never ask which one; decide.
+- Sort by meaning, not wording: a meeting, appointment, call, dinner or anything happening at a time or on a day goes into the iPhone calendar (calendar_add_event, Arbete). Things to do or remember (ring X, buy, pay, send) are items via add_task, with a reminder when he gives a time. Never ask which one; decide.
 - THRIFTIN schedule (staff shifts, day notes): read it with thriftin_schedule. Staff see it, so before any change say the exact change in one line and wait for his yes ("Lägger in Richie lör 8/11, 6 h — ok?"). Never message or notify staff.
 - Web: use web_search and web_fetch for general questions (hotels, trips, prices, opening hours, how-tos). Say briefly where it comes from when it matters; never read out URLs.
 
@@ -128,15 +128,16 @@ export const textOf = (content: any[]): string =>
 // ── Chips for the app ───────────────────────────────────────────────────
 export type Action = { tool: string; summary: string; ok: boolean };
 
-const WRITE_TOOLS = new Set(["add", "update", "delete", "complete", "skip", "draft_reply", "mark_email_handled", "sort_note", "scan_email", "remember", "forget", "add_mail_rule"]);
+const WRITE_TOOLS = new Set(["add_task", "update_task", "delete_task", "complete_task", "skip_task", "draft_reply", "mark_email_handled", "sort_note", "scan_email", "remember", "forget", "add_mail_rule"]);
 const clip = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const noIds = (s: string) => s.replace(/\s*\[[0-9a-f]{8}\]\s*/g, " ").replace(/\s+([:,.])/g, "$1").replace(/\s+/g, " ").trim();
 
-export function actionsFor(tool: string, text: string, isError: boolean): Action[] {
+export function actionsFor(name: string, text: string, isError: boolean): Action[] {
+  const tool = toolName(name);
   if (!WRITE_TOOLS.has(tool)) return [];
   const first = noIds(String(text ?? "").split("\n")[0] ?? "");
   if (isError) return [{ tool, ok: false, summary: clip(`${tool} failed: ${first.replace(/^Error:\s*/, "")}`) }];
-  if (tool === "add" || tool === "sort_note") {
+  if (tool === "add_task" || tool === "sort_note") {
     const items = String(text).split("\n").filter((l) => /^\[[0-9a-f]{8}\] /.test(l)).map((l) => {
       const parts = noIds(l).split(" · ");
       const lane = parts.find((p, i) => i > 0 && /^[A-ZÅÄÖ][A-ZÅÄÖ ]{1,20}$/.test(p.trim()));
