@@ -1,108 +1,45 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { api, supabase, must } from "../lib/supabase.js";
 import { when } from "../lib/time.js";
-import EmailSheet from "./EmailSheet.jsx";
-import { mailtoForEmail, openInMailHref } from "../lib/mailto.js";
+import { emojiFor } from "../lib/emoji.js";
 
 const RECUR = { daily: "every day", weekdays: "weekdays", weekly: "every week", monthly: "every month", yearly: "every year" };
 
-// One item: lane colour stripe, title, when, and the actions. Done closes it
-// straight away (with a short celebration); Skip asks why (no score guilt);
-// ⋯ has Tomorrow and Delete. Titles/notes stay in whatever language they are.
-export default function ItemCard({ item, lane, onChange, checklist }) {
+// One item in a list: a soft block in its lane's colour. Tap = open it in
+// Focus; the round button = done. Buy items are a plain checklist.
+export default function ItemCard({ item, lane, onChange, checklist, openFocus, celebrate }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [more, setMore] = useState(false);
-  const [cheer, setCheer] = useState(false);
-  const [mailOpen, setMailOpen] = useState(false);
-  const [mail, setMail] = useState(null);
-  const color = lane?.color ?? "#64748B";
-  const overdue = item.due_at && Date.parse(item.due_at) < Date.now() && !item.all_day;
+  const [ticked, setTicked] = useState(false);
 
-  // Items made from an email: load it now, so "Open in Mail" is a plain
-  // link (iPhone only opens the mail app straight from a tap).
-  useEffect(() => {
-    if (!item.email_id) return;
-    let live = true;
-    supabase.from("emails").select("from_name, from_address, subject, received_at, body, preview, draft_text, draft_language, internet_message_id")
-      .eq("id", item.email_id).maybeSingle()
-      .then(({ data }) => { if (live && data) setMail({ ...data, body: data.body || data.preview }); });
-    return () => { live = false; };
-  }, [item.email_id]);
-  const mailto = mailtoForEmail(mail);
-  const openMail = openInMailHref(mail);
-
-  const run = async (fn, celebrate = false) => {
+  const done = async () => {
     setBusy(true); setErr("");
     try {
-      await fn();
-      if (celebrate) { setCheer(true); setTimeout(() => { setCheer(false); onChange?.(); }, 900); } else onChange?.();
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+      setTicked(true);
+      await api("complete", { id: item.id });
+      if (!checklist) celebrate?.();
+      setTimeout(() => onChange?.(), checklist ? 350 : 0);
+    } catch (e) { setTicked(false); setErr(e.message); } finally { setBusy(false); }
   };
-  const done = () => run(() => api("complete", { id: item.id }), true);
-  const skip = () => {
-    const reason = window.prompt("Skip this one? Say why in a few words (just for you).");
-    if (reason == null) return;
-    run(() => api("skip", { id: item.id, reason: reason.trim() || "skipped" }));
-  };
-  const tomorrow = () => run(async () => {
-    const shift = (iso) => (iso ? new Date(Date.parse(iso) + 86400000).toISOString() : null);
-    const base = item.due_at ?? new Date().toISOString();
-    must(await supabase.from("items").update({ due_at: shift(base), remind_at: shift(item.remind_at), reminded_at: null }).eq("id", item.id));
-  });
-  const del = () => window.confirm(`Delete "${item.title}"?`) && run(async () => must(await supabase.from("items").delete().eq("id", item.id)));
+  const del = () => window.confirm(`Delete "${item.title}"?`) && supabase.from("items").delete().eq("id", item.id).then(must).then(() => onChange?.()).catch((e) => setErr(e.message));
 
-  if (cheer) {
-    return <div className="card cheer" style={{ borderLeftColor: color }}><div className="body"><div className="title">🎉 Done! {item.title}</div></div></div>;
-  }
-
-  if (checklist) {
-    return (
-      <div className="card check" style={{ borderLeftColor: color }}>
-        <button className="tick" disabled={busy} onClick={done} aria-label="Bought">○</button>
-        <div className="body">
-          <div className="title">{item.title}</div>
-          {item.notes && <div className="notes">{item.notes}</div>}
-          {err && <div className="err">{err}</div>}
-        </div>
-        <button className="ghost small" onClick={del} disabled={busy} aria-label="Delete">✕</button>
-      </div>
-    );
-  }
+  const sub = [
+    item.due_at ? when(item) : null,
+    item.minutes ? `${item.minutes} min` : null,
+    item.recur ? `↻ ${RECUR[item.recur] ?? item.recur}` : null,
+    item.location ? `@ ${item.location}` : null,
+  ].filter(Boolean).join(" · ");
 
   return (
-    <div className="card" style={{ borderLeftColor: color }}>
-      <div className="body">
-        <div className="title">{item.title}</div>
-        <div className="meta">
-          {item.due_at && <span className={overdue ? "late" : ""}>{when(item)}</span>}
-          {lane && <span className="lane-tag" style={{ color }}>{lane.name}</span>}
-          {item.recur && <span>↻ {RECUR[item.recur] ?? item.recur}</span>}
-          {item.remind_again_minutes && <span>🔔 again after {item.remind_again_minutes} min</span>}
-          {item.location && <span>@ {item.location}</span>}
-        </div>
-        {item.notes && <div className="notes">{item.notes}</div>}
-        {item.email_id && (
-          <div className="row">
-            {openMail && <a className="primary button-link small" href={openMail}>📬 Open in Mail</a>}
-            {mailto && <a className="primary button-link small" href={mailto}>✉️ Reply in Mail (written)</a>}
-            <button className="ghost small" onClick={() => setMailOpen(true)}>📧 Read here</button>
-          </div>
-        )}
+    <div className="card lane-bg" style={{ "--lane": lane?.color }}>
+      {!checklist && <span className="emo">{emojiFor(item, lane?.slug)}</span>}
+      <button className="body" onClick={() => (checklist ? null : openFocus?.(item, false))}>
+        <div className="t">{item.title}</div>
+        {(sub || (checklist && item.notes)) && <div className="s">{checklist ? item.notes : sub}</div>}
         {err && <div className="err">{err}</div>}
-        {more && (
-          <div className="row">
-            <button className="ghost small" onClick={tomorrow} disabled={busy}>→ Tomorrow</button>
-            <button className="ghost small danger" onClick={del} disabled={busy}>Delete</button>
-          </div>
-        )}
-      </div>
-      <div className="actions">
-        <button className="done" onClick={done} disabled={busy}>Done</button>
-        <button className="ghost small" onClick={skip} disabled={busy}>Skip</button>
-        <button className="ghost small" onClick={() => setMore(!more)} aria-label="More">⋯</button>
-      </div>
-      {mailOpen && <EmailSheet id={item.email_id} onClose={() => setMailOpen(false)} onChange={onChange} />}
+      </button>
+      {checklist && <button className="ghost small" onClick={del} aria-label="Delete">✕</button>}
+      <button className={`tick${ticked ? " on" : ""}`} onClick={done} disabled={busy} aria-label={checklist ? "Bought" : "Done"}>✓</button>
     </div>
   );
 }

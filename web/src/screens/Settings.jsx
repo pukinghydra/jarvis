@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, supabase, must } from "../lib/supabase.js";
 import { enablePush, pushState, isStandalone } from "../lib/push.js";
 
-export default function Settings({ session }) {
+export default function Settings({ session, onBack }) {
   const [status, setStatus] = useState(null);
   const [owner, setOwner] = useState(null);
   const [push, setPush] = useState("…");
@@ -82,6 +82,8 @@ export default function Settings({ session }) {
   const hm = status?.hotmail;
   return (
     <div className="screen settings">
+      <button className="back" onClick={onBack}>‹ Back to Today</button>
+      <h1>Settings</h1>
       {msg && <div className="ok">{msg}</div>}
       {err && <div className="err">{err}</div>}
 
