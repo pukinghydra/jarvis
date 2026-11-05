@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase, must } from "../lib/supabase.js";
 import { dayLabel, time } from "../lib/time.js";
 import { useSwipeClose } from "../lib/swipe.js";
-import { mailtoForEmail } from "../lib/mailto.js";
+import { mailtoForEmail, openInMailHref } from "../lib/mailto.js";
 
 // One email exactly as it arrived (original language, never translated),
 // with Jarvis's draft reply under it. Opens over the current screen.
@@ -17,7 +17,7 @@ export default function EmailSheet({ id, onClose, onChange }) {
   useEffect(() => {
     let live = true;
     supabase.from("emails")
-      .select("id, from_name, from_address, subject, received_at, body, preview, importance, summary, status, draft_text, draft_language")
+      .select("id, from_name, from_address, subject, received_at, body, preview, importance, summary, status, draft_text, draft_language, internet_message_id")
       .eq("id", id).maybeSingle()
       .then(({ data, error }) => { if (!live) return; if (error) setErr(error.message); else setE(data); });
     return () => { live = false; };
@@ -32,6 +32,7 @@ export default function EmailSheet({ id, onClose, onChange }) {
   };
 
   const mailto = mailtoForEmail(e);
+  const openMail = openInMailHref(e);
 
   return (
     <div className="sheet-bg" onClick={onClose}>
@@ -52,12 +53,13 @@ export default function EmailSheet({ id, onClose, onChange }) {
               </div>
               {e.summary && <div className="email-summary">{e.importance === "urgent" ? "🔴 " : e.importance === "important" ? "🟠 " : ""}{e.summary}</div>}
             </div>
+            {openMail && <a className="primary button-link" href={openMail}>📬 Open in Mail (attachments, reply, everything)</a>}
 
             {e.draft_text && (
               <div className="email-draft">
-                <div className="muted small">Jarvis's draft reply{e.draft_language ? ` (${e.draft_language})` : ""}. Open in Mail: your mail app opens with it written, the email quoted under it. Check it, press Send.</div>
+                <div className="muted small">Jarvis's draft reply{e.draft_language ? ` (${e.draft_language})` : ""}. Reply in Mail: your mail app opens with it written, the email quoted under it. Check it, press Send.</div>
                 <div className="email-body">{e.draft_text}</div>
-                {mailto && <a className="primary button-link" href={mailto}>✉️ Open in Mail</a>}
+                {mailto && <a className="primary button-link" href={mailto}>✉️ Reply in Mail (written)</a>}
               </div>
             )}
 

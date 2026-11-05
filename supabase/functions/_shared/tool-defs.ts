@@ -297,3 +297,27 @@ export const LEGACY_TOOL_NAMES: Record<string, ToolName> = {
   skip: "skip_task", lane: "lane_tasks", search: "search_tasks",
 };
 export const toolName = (name: string): string => LEGACY_TOOL_NAMES[name] ?? name;
+
+// MCP tool annotations. The Claude app groups a connector's tools by these
+// (read-only / write / delete) so VIC can set "Always allow" once per group.
+const READ_ONLY = new Set<string>([
+  "today", "lanes", "upcoming", "lane_tasks", "search_tasks", "unsorted", "emails", "read_email", "writing_style",
+  "mail_rules", "brief", "buy_list", "calendar_list", "calendar_events", "thriftin_schedule", "recall",
+]);
+const DESTRUCTIVE = new Set<string>(["delete_task", "calendar_delete_event", "forget", "thriftin_remove_shift"]);
+// Calls that reach outside Jarvis's own database (Hotmail, iCloud, THRIFTIN).
+const OPEN_WORLD = new Set<string>([
+  "scan_email", "emails", "read_email", "draft_reply", "mark_email_handled", "calendar_list", "calendar_events",
+  "calendar_add_event", "calendar_update_event", "calendar_delete_event", "thriftin_schedule", "thriftin_set_shift",
+  "thriftin_remove_shift", "thriftin_day_note", "brief",
+]);
+export function toolAnnotations(name: string) {
+  const title = name.split("_").map((w, i) => (i ? w : w[0].toUpperCase() + w.slice(1))).join(" ");
+  const readOnly = READ_ONLY.has(name);
+  return {
+    title,
+    readOnlyHint: readOnly,
+    ...(readOnly ? {} : { destructiveHint: DESTRUCTIVE.has(name), idempotentHint: false }),
+    openWorldHint: OPEN_WORLD.has(name),
+  };
+}

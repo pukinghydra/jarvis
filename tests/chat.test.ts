@@ -289,3 +289,16 @@ test("tool names: distinctive names listed; old one-word names still run (aliase
   const r: any = await handleRpc({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "add", arguments: {} } }, tools);
   eq(r.result.content[0].text, "Saved 1");
 });
+
+test("annotations: every tool has them; reads are read-only, deletes destructive, adds are neither", async () => {
+  const { toolAnnotations } = await import("../supabase/functions/_shared/tool-defs.ts");
+  const tools = TOOL_DEFS.map((t) => ({ name: t.name as string, description: "", inputSchema: {}, handler: async () => "" }));
+  const r: any = await handleRpc({ jsonrpc: "2.0", id: 1, method: "tools/list" }, tools);
+  for (const t of r.result.tools) ok(t.annotations && typeof t.annotations.readOnlyHint === "boolean", `${t.name} annotated`);
+  eq(toolAnnotations("today").readOnlyHint, true);
+  eq(toolAnnotations("emails").readOnlyHint, true);
+  eq(toolAnnotations("delete_task").destructiveHint, true);
+  eq(toolAnnotations("add_task").readOnlyHint, false);
+  eq(toolAnnotations("add_task").destructiveHint, false);
+  eq(toolAnnotations("update_task").title, "Update task");
+});

@@ -1,7 +1,7 @@
 // Minimal MCP server over Streamable HTTP: JSON-RPC 2.0 in a POST, one JSON
 // answer back (no SSE). Pure routing; the tools are passed in.
 
-import { toolName } from "./tool-defs.ts";
+import { toolAnnotations, toolName } from "./tool-defs.ts";
 
 export type ToolDef = {
   name: string;
@@ -37,7 +37,7 @@ export async function handleRpc(msg: Rpc, tools: ToolDef[], instructions?: strin
     case "ping":
       return isNotification ? null : ok(msg.id, {});
     case "tools/list":
-      return ok(msg.id, { tools: tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) });
+      return ok(msg.id, { tools: tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema, annotations: toolAnnotations(name) })) });
     case "tools/call": {
       const name = String(msg.params?.name ?? "");
       const tool = tools.find((t) => t.name === toolName(name));

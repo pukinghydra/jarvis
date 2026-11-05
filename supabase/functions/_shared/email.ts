@@ -34,6 +34,7 @@ export async function scanEmails(now: Date, opts: { notify?: boolean } = {}) {
       graph_id: m.id, received_at: m.received_at, from_name: m.from_name, from_address: m.from_address,
       subject: m.subject, preview: cleanBody(m.preview, 300), body, flagged: reasons.length > 0, flag_reasons: reasons,
       conversation_id: m.conversation_id, bulk_reason: bulkHeaders(m.headers), last_verb: m.last_verb,
+      internet_message_id: m.internet_message_id,
     };
   });
   if (rows.length) {
@@ -60,7 +61,7 @@ export async function scanEmails(now: Date, opts: { notify?: boolean } = {}) {
 // emails stored before Jarvis read those.
 export async function recheckOpen(now: Date) {
   const open = must(
-    await sb.from("emails").select("id, graph_id, conversation_id, received_at, status, draft_id, bulk_reason, last_verb, subject, from_address")
+    await sb.from("emails").select("id, graph_id, conversation_id, received_at, status, draft_id, bulk_reason, last_verb, subject, from_address, internet_message_id")
       .in("status", ["new", "drafted"]).gte("received_at", new Date(now.getTime() - 30 * 86400_000).toISOString())
       .order("received_at", { ascending: true }).limit(300),
     "open emails",
@@ -73,6 +74,7 @@ export async function recheckOpen(now: Date) {
     const s = state.get(e.graph_id);
     const patch: Record<string, unknown> = {};
     if (s?.conversation_id && s.conversation_id !== e.conversation_id) patch.conversation_id = s.conversation_id;
+    if (s?.internet_message_id && !e.internet_message_id) patch.internet_message_id = s.internet_message_id;
     if (s && s.last_verb !== null && s.last_verb !== e.last_verb) patch.last_verb = s.last_verb;
     if (s?.headers && !e.bulk_reason) {
       const b = bulkHeaders(s.headers);

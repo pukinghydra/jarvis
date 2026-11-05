@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, supabase, must } from "../lib/supabase.js";
 import { when } from "../lib/time.js";
 import EmailSheet from "./EmailSheet.jsx";
-import { mailtoForEmail } from "../lib/mailto.js";
+import { mailtoForEmail, openInMailHref } from "../lib/mailto.js";
 
 const RECUR = { daily: "every day", weekdays: "weekdays", weekly: "every week", monthly: "every month", yearly: "every year" };
 
@@ -24,12 +24,13 @@ export default function ItemCard({ item, lane, onChange, checklist }) {
   useEffect(() => {
     if (!item.email_id) return;
     let live = true;
-    supabase.from("emails").select("from_name, from_address, subject, received_at, body, preview, draft_text, draft_language")
+    supabase.from("emails").select("from_name, from_address, subject, received_at, body, preview, draft_text, draft_language, internet_message_id")
       .eq("id", item.email_id).maybeSingle()
       .then(({ data }) => { if (live && data) setMail({ ...data, body: data.body || data.preview }); });
     return () => { live = false; };
   }, [item.email_id]);
   const mailto = mailtoForEmail(mail);
+  const openMail = openInMailHref(mail);
 
   const run = async (fn, celebrate = false) => {
     setBusy(true); setErr("");
@@ -83,8 +84,9 @@ export default function ItemCard({ item, lane, onChange, checklist }) {
         {item.notes && <div className="notes">{item.notes}</div>}
         {item.email_id && (
           <div className="row">
-            {mailto && <a className="primary button-link small" href={mailto}>✉️ Open in Mail (reply written)</a>}
-            <button className="ghost small" onClick={() => setMailOpen(true)}>📧 {mailto ? "Read here" : "Read the email"}</button>
+            {openMail && <a className="primary button-link small" href={openMail}>📬 Open in Mail</a>}
+            {mailto && <a className="primary button-link small" href={mailto}>✉️ Reply in Mail (written)</a>}
+            <button className="ghost small" onClick={() => setMailOpen(true)}>📧 Read here</button>
           </div>
         )}
         {err && <div className="err">{err}</div>}

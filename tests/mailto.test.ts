@@ -1,6 +1,6 @@
 import { suite, eq, ok } from "./t.ts";
 // @ts-ignore plain JS from the web app
-import { mailtoForEmail, replyMailto } from "../web/src/lib/mailto.js";
+import { mailtoForEmail, openInMailHref, replyMailto } from "../web/src/lib/mailto.js";
 
 const { test, run } = suite();
 export { run };
@@ -37,4 +37,12 @@ test("mailto: a huge thread is cut so the link stays a sane length", () => {
   const href = replyMailto({ to: "a@b.se", subject: "x", body: "Hej", original: { body: "z".repeat(20000), from_address: "a@b.se" } })!;
   ok(href.length < 6000, `length ${href.length}`);
   ok(parse(href).body!.endsWith("…"));
+});
+
+test("open in Mail: message:// link from the Message-ID, brackets encoded; none without an id", () => {
+  eq(openInMailHref({ internet_message_id: "<AM0PR01MB1234.eurprd01@prod.outlook.com>" }), "message://%3CAM0PR01MB1234.eurprd01%40prod.outlook.com%3E");
+  eq(openInMailHref({ internet_message_id: "abc+1@x.se" }), "message://%3Cabc%2B1%40x.se%3E");
+  eq(openInMailHref({ internet_message_id: null }), null);
+  eq(openInMailHref({ internet_message_id: "<bad id>" }), null);
+  eq(openInMailHref(null), null);
 });

@@ -115,6 +115,7 @@ export type MailMessage = {
   preview: string;
   body: string;
   conversation_id: string | null;
+  internet_message_id: string | null;
   headers: { name: string; value: string }[] | null; // null = not fetched
   last_verb: number | null;                          // PidTagLastVerbExecuted
 };
@@ -154,12 +155,12 @@ export async function inboxSince(since: Date, top = 40): Promise<MailMessage[]> 
   let r: any;
   let rich = true;
   try {
-    const q = new URLSearchParams({ ...base, $select: "id,subject,from,receivedDateTime,bodyPreview,body,conversationId,internetMessageHeaders", $expand: EXPAND_VERB });
+    const q = new URLSearchParams({ ...base, $select: "id,subject,from,receivedDateTime,bodyPreview,body,conversationId,internetMessageId,internetMessageHeaders", $expand: EXPAND_VERB });
     r = await graph(`/me/mailFolders/inbox/messages?${q}`, init);
   } catch (e) {
     if (!(e instanceof GraphError) || e.status !== 400) throw e;
     rich = false;
-    const q = new URLSearchParams({ ...base, $select: "id,subject,from,receivedDateTime,bodyPreview,body,conversationId" });
+    const q = new URLSearchParams({ ...base, $select: "id,subject,from,receivedDateTime,bodyPreview,body,conversationId,internetMessageId" });
     r = await graph(`/me/mailFolders/inbox/messages?${q}`, init);
   }
   return (r?.value ?? []).map((m: any) => ({
@@ -171,6 +172,7 @@ export async function inboxSince(since: Date, top = 40): Promise<MailMessage[]> 
     preview: m.bodyPreview ?? "",
     body: String(m.body?.content ?? m.bodyPreview ?? ""),
     conversation_id: m.conversationId ?? null,
+    internet_message_id: m.internetMessageId ?? null,
     headers: rich ? (Array.isArray(m.internetMessageHeaders) ? m.internetMessageHeaders : []) : null,
     last_verb: rich ? lastVerbOf(m) : null,
   }));
@@ -179,19 +181,20 @@ export async function inboxSince(since: Date, top = 40): Promise<MailMessage[]> 
 // The state of inbox mail since `since` (no bodies): conversation, headers
 // and last verb. Used to re-check open emails every scan (VIC may have
 // answered from his phone). Map keyed by Graph message id.
-export async function inboxState(since: Date): Promise<Map<string, { conversation_id: string | null; headers: { name: string; value: string }[] | null; last_verb: number | null }>> {
+export async function inboxState(since: Date): Promise<Map<string, { conversation_id: string | null; internet_message_id: string | null; headers: { name: string; value: string }[] | null; last_verb: number | null }>> {
   const base = { $filter: `receivedDateTime ge ${since.toISOString()}`, $orderby: "receivedDateTime desc", $top: "100" };
   let rows: any[];
   let rich = true;
   try {
-    rows = await listAll(`/me/mailFolders/inbox/messages?${new URLSearchParams({ ...base, $select: "id,conversationId,receivedDateTime,internetMessageHeaders", $expand: EXPAND_VERB })}`, {});
+    rows = await listAll(`/me/mailFolders/inbox/messages?${new URLSearchParams({ ...base, $select: "id,conversationId,receivedDateTime,internetMessageId,internetMessageHeaders", $expand: EXPAND_VERB })}`, {});
   } catch (e) {
     if (!(e instanceof GraphError) || e.status !== 400) throw e;
     rich = false;
-    rows = await listAll(`/me/mailFolders/inbox/messages?${new URLSearchParams({ ...base, $select: "id,conversationId,receivedDateTime" })}`, {});
+    rows = await listAll(`/me/mailFolders/inbox/messages?${new URLSearchParams({ ...base, $select: "id,conversationId,receivedDateTime,internetMessageId" })}`, {});
   }
   return new Map(rows.map((m: any) => [m.id, {
     conversation_id: m.conversationId ?? null,
+    internet_message_id: m.internetMessageId ?? null,
     headers: rich ? (Array.isArray(m.internetMessageHeaders) ? m.internetMessageHeaders : []) : null,
     last_verb: rich ? lastVerbOf(m) : null,
   }]));

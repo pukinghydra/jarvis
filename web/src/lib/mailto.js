@@ -36,3 +36,12 @@ export function replyMailto({ to, subject, body, original, lang }) {
 // The link for one emails row (draft_text, from_address, subject, body...).
 export const mailtoForEmail = (e) =>
   e?.draft_text ? replyMailto({ to: e.from_address, subject: e.subject, body: e.draft_text, original: e, lang: e.draft_language }) : null;
+
+// Open the email itself in the iPhone Mail app: message://<Message-ID>
+// (angle brackets percent-encoded). Works when that mailbox is set up in
+// Mail and the email is downloaded there. null without a Message-ID.
+export function openInMailHref(e) {
+  const raw = String(e?.internet_message_id ?? "").trim().replace(/^<|>$/g, "");
+  if (!raw || /[\s<>]/.test(raw)) return null;
+  return `message://%3C${encodeURIComponent(raw)}%3E`;
+}
