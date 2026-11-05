@@ -68,3 +68,13 @@ test("dupes: same meeting twice the same day is one; different payments or days 
   ok(!sameThing({ title: "Ring Johan om hyran", due_at: d }, { title: "Ring Johan om hyran", due_at: null }), "dated vs undated");
   ok(sameThing({ title: "Köp tejp och kartonger", due_at: null }, { title: "köp kartonger + tejp", due_at: null }));
 });
+
+test("emails: Claude can find any email (handled too) and link it to a to-do", async () => {
+  const { TOOL_DEFS, INSTRUCTIONS, ITEM_SCHEMA } = await import("../supabase/functions/_shared/tool-defs.ts");
+  const get = (n: string) => TOOL_DEFS.find((t) => t.name === n) as any;
+  ok(get("emails").inputSchema.properties.query, "emails has query");
+  ok(get("emails").inputSchema.properties.include_handled, "emails has include_handled");
+  ok(get("update_task").inputSchema.properties.email_id, "update_task can link an email");
+  ok((ITEM_SCHEMA as any).properties.email_id, "add_task can link an email");
+  ok(/handled and old mail and Hotmail itself/.test(INSTRUCTIONS));
+});

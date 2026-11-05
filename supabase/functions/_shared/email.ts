@@ -4,7 +4,7 @@
 // writes reply drafts with draft_reply. Nothing here ever sends email.
 
 import { sb, must, getSetting, HttpError } from "./db.ts";
-import { accessToken, createReplyDraft, deleteMessage, inboxSince, inboxState, messageMeta, sentSince } from "./graph.ts";
+import { accessToken, createReplyDraft, deleteMessage, inboxSince, inboxState, messageMeta, searchMailbox, sentSince } from "./graph.ts";
 import { cleanBody, flagEmail } from "./email-rules.ts";
 import { answeredState, bulkHeaders, cleanupPlan, deleteJarvisDraft } from "./mail-rules-core.ts";
 import { push } from "./push.ts";
@@ -123,6 +123,37 @@ export async function cleanupEmail(email: { id: string; draft_id: string | null;
     }
   }
   return { draft };
+}
+
+// Find emails by words (sender, address, subject, text) among ALL emails,
+// handled or not. Nothing stored matches -> search Hotmail itself (all
+// folders) and keep what it finds, marked handled so it never lands in the
+// Mail tab, so it gets an id VIC can link to a to-do.
+export async function findEmails(query: string, limit = 10): Promise<any[]> {
+  const words = String(query ?? "").replace(/[%_,()\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
+  if (!words) return [];
+  const cols = "id, short_id, received_at, from_name, from_address, subject, body, status, importance, summary, draft_text, draft_language, internet_message_id";
+  const seen = new Map<string, any>();
+  const look = async (field: string, w: string) => {
+    for (const r of must(await sb.from("emails").select(cols).ilike(field, `%${w}%`).order("received_at", { ascending: false }).limit(limit), "find emails") ?? []) seen.set(r.id, r);
+  };
+  for (const f of ["from_name", "from_address", "subject"]) await look(f, words);
+  if (!seen.size) for (const w of words.split(" ").filter((x) => x.length >= 3).slice(0, 4)) for (const f of ["from_name", "from_address", "subject"]) await look(f, w);
+  if (!seen.size) await look("body", words);
+  if (!seen.size) {
+    const found = await searchMailbox(words, limit).catch(() => []);
+    if (found.length) {
+      const now = new Date().toISOString();
+      const rows = found.map((m) => ({
+        graph_id: m.id, received_at: m.received_at, from_name: m.from_name, from_address: m.from_address, subject: m.subject,
+        preview: cleanBody(m.preview, 300), body: cleanBody(m.body), conversation_id: m.conversation_id, internet_message_id: m.internet_message_id,
+        status: "handled", handled_at: now, handled_reason: "found by search",
+      }));
+      must(await sb.from("emails").upsert(rows, { onConflict: "graph_id", ignoreDuplicates: true }), "save found emails");
+      for (const r of must(await sb.from("emails").select(cols).in("graph_id", found.map((m) => m.id)), "found emails") ?? []) seen.set(r.id, r);
+    }
+  }
+  return [...seen.values()].sort((a, b) => Date.parse(b.received_at) - Date.parse(a.received_at)).slice(0, limit);
 }
 
 export async function resolveEmail(ref: string): Promise<any> {

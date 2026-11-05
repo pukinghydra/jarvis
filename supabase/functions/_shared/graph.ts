@@ -141,6 +141,20 @@ async function listAll(path: string, init: RequestInit, pages = 5): Promise<any[
   return out;
 }
 
+// Search the whole mailbox (every folder, handled or not) for words, the
+// way Outlook's search box does. Newest matches, bodies as plain text.
+export async function searchMailbox(query: string, top = 10): Promise<MailMessage[]> {
+  const words = String(query ?? "").replace(/["\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
+  if (!words) return [];
+  const q = new URLSearchParams({ $search: `"${words}"`, $top: String(Math.min(25, Math.max(1, top))), $select: "id,subject,from,receivedDateTime,bodyPreview,body,conversationId,internetMessageId" });
+  const r = await graph(`/me/messages?${q}`, { headers: { Prefer: 'outlook.body-content-type="text"' } });
+  return (r?.value ?? []).map((m: any) => ({
+    id: m.id, subject: m.subject ?? null, from_name: m.from?.emailAddress?.name ?? null, from_address: m.from?.emailAddress?.address ?? null,
+    received_at: m.receivedDateTime, preview: m.bodyPreview ?? "", body: String(m.body?.content ?? m.bodyPreview ?? ""),
+    conversation_id: m.conversationId ?? null, internet_message_id: m.internetMessageId ?? null, headers: null, last_verb: null,
+  }));
+}
+
 // Inbox mail received since `since`, newest first, bodies as plain text,
 // with the conversation id, the internet headers (mass-mail signals) and
 // the last verb (answered?). If Outlook refuses the extras, the plain
