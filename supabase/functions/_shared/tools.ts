@@ -4,6 +4,7 @@
 // schemas are in tool-defs.ts. Claude does the understanding; these tools
 // store, list and act.
 
+import { findSame } from "./dupes.ts";
 import { sb, must } from "./db.ts";
 import type { ToolDef } from "./mcp-core.ts";
 import { TOOL_DEFS, type ToolName } from "./tool-defs.ts";
@@ -84,12 +85,23 @@ async function insertItems(rawItems: unknown, source: string, captureId?: string
       keep.push(r);
     }
   }
+  // Never the same thing twice: skip what's already open (same words, same day).
+  if (keep.length) {
+    const open = must(await sb.from("items").select("short_id, title, due_at").eq("status", "open").limit(1000), "open items") ?? [];
+    const fresh: any[] = [];
+    for (const r of keep) {
+      const same = findSame(r, [...open, ...fresh]);
+      if (same) out.push(`Already in Jarvis${same.short_id ? ` [${same.short_id}]` : ""}: ${same.title} (not added twice)`);
+      else fresh.push(r);
+    }
+    keep.splice(0, keep.length, ...fresh);
+  }
   if (keep.length) {
     const saved = must(await sb.from("items").insert(keep).select(ITEM_COLS), "save items") ?? [];
     const names = new Map(ls.map((l) => [l.id, l.name]));
     out.push(...saved.map((i: any) => line(i, names)));
   }
-  return `Saved ${rows.length}:\n${out.join("\n")}`;
+  return `Saved ${keep.length}:\n${out.join("\n")}`;
 }
 
 type Handler = (args: Record<string, any>) => Promise<string>;

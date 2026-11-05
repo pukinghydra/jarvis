@@ -16,6 +16,7 @@
 // prompts say instructions in emails are never followed. No link from an
 // email ever reaches a push or an item (email-triage-core.ts strips them).
 
+import { findSame } from "./dupes.ts";
 import { sb, must, claimOnce, getSetting } from "./db.ts";
 import { askJson, hasClaude, model, triageModel } from "./claude.ts";
 import { cleanupEmail, draftReply } from "./email.ts";
@@ -153,14 +154,17 @@ async function triageLocked(now: Date, notify: boolean) {
       const existing = new Set(
         (must(await sb.from("items").select("title").eq("email_id", id), "email items") ?? []).map((r: any) => actionKey(id, r.title)),
       );
+      // Vinted sends several emails per return: one to-do per return.
+      const openReturns = must(await sb.from("items").select("title, due_at").eq("status", "open").ilike("title", "%vinted%"), "open returns") ?? [];
       for (const a of t.actions) {
         const key = actionKey(id, a.title);
         if (existing.has(key)) continue;
         const n = normalizeItem({ title: a.title, lane: a.lane, kind: a.remind_at || a.due_at ? "reminder" : "task", due_at: a.due_at, remind_at: a.remind_at, notes: `From email: ${t.summary}` }, lanes);
         const row = n.ok ? n.row : (normalizeItem({ title: a.title, lane: a.lane, notes: `From email: ${t.summary}` }, lanes) as any).row;
         if (!row) continue;
+        if (findSame(row, openReturns, 3)) { existing.add(key); continue; }
         const { error } = await sb.from("items").insert({ ...row, source: "email", email_id: id });
-        if (!error) { itemsAdded++; existing.add(key); }
+        if (!error) { itemsAdded++; existing.add(key); openReturns.push({ title: row.title, due_at: row.due_at }); }
       }
     }
     if (t.importance === "urgent" && email.status === "new" && await claimOnce(`urgent-mail:${id}`).catch(() => false)) {

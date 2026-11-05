@@ -105,7 +105,7 @@ export default function Lists({ lanes, reloadLanes, refreshKey, onChange, openFo
       )}
 
       {err && <div className="err">{err}</div>}
-      {items.map((i) => <ItemCard key={i.id} item={i} lane={lane} checklist={lane?.slug === "buy"} openFocus={openFocus} celebrate={celebrate} onChange={() => { load(); onChange?.(); }} />)}
+      {items.map((i) => <ItemCard key={`${i.id}:${i.due_at}`} item={i} lane={lane} checklist={lane?.slug === "buy"} openFocus={openFocus} celebrate={celebrate} onChange={() => { load(); onChange?.(); }} />)}
       {!items.length && <div className="calm"><b>🌱</b>Nothing here.</div>}
     </div>
   );

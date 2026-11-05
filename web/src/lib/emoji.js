@@ -3,11 +3,11 @@
 const WORDS = [
   [/tiktok|film|video|reel/i, "🎥"], [/insta/i, "📸"], [/ring|call|samtal|telefon|phone/i, "📞"],
   [/möte|meeting|mötet|seb|bank/i, "🤝"], [/betala|pay|faktura|invoice|amex|kivra|räkning|ellevio/i, "💳"],
+  [/maps|google|adress|address/i, "🗺️"],
   [/skicka|send|post(a|en)?\b|paket|retur|return|vinted/i, "📦"], [/mail|mejl|svara|reply|email/i, "✉️"],
   [/köp|buy|handla|shop/i, "🛒"], [/städ|clean/i, "🧽"], [/tvätt|laundry/i, "🧺"], [/träna|gym|run|löp/i, "🏃"],
   [/läkare|doctor|tandläkare|dentist|apotek/i, "🩺"], [/födelsedag|birthday|bday/i, "🎂"], [/middag|dinner|lunch|fika/i, "🍽️"],
   [/skatt|moms|vat|fortnox|bokför/i, "🧾"], [/foto|photo|bild/i, "📷"], [/jacka|kappa|coat|jacket|plagg|sweater|tröja/i, "🧥"],
-  [/maps|google|adress|address/i, "🗺️"],
 ];
 const LANE = { thriftin: "🛍️", buy: "🛒", money: "💳", people: "💬", life: "🌿", inbox: "✉️" };
 

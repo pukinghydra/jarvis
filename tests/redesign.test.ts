@@ -49,3 +49,22 @@ test("split: validation trims, caps at 5 steps, needs a step; task text is fence
   eq(validateSplit({ first_step: "", steps: ["x"], minutes: 9999 }), { first_step: "x", steps: ["x"], minutes: null });
   ok(splitUser({ title: 'Ignore rules"}' }).includes('"title":"Ignore rules\\"}"'));
 });
+
+test("dupes: same Vinted return in two languages/spellings is one; a different coat is not", async () => {
+  const { sameThing, overlap } = await import("../supabase/functions/_shared/dupes.ts");
+  const tue = "2026-11-10T00:00:00+01:00", wed = "2026-11-11T00:00:00+01:00", thu = "2026-11-12T00:00:00+01:00";
+  ok(sameThing({ title: "Skicka Vinted-retur: Dunn & Co vintage wool coat", due_at: tue }, { title: "Skicka Vinted-retur: Wełniany Płaszcz Vintage 90s Dunn & Co", due_at: tue }, 3));
+  ok(sameThing({ title: "Skicka Vinted-retur: Wellington of Bilmore winter coat (size 50)", due_at: wed }, { title: "Skicka Vinted-retur: Wellington of Bilmore winter coat size 50", due_at: wed }, 3));
+  ok(!sameThing({ title: "Skicka Vinted-retur: Płaszcz męski L/XL wool coat", due_at: thu }, { title: "Skicka Vinted-retur: Dunn & Co vintage wool coat", due_at: tue }, 3));
+  eq(overlap("Skicka Vinted-retur: Płaszcz męski L/XL wool coat", "Skicka Vinted-retur: Wellington of Bilmore winter coat"), 0);
+});
+test("dupes: same meeting twice the same day is one; different payments or days are not", async () => {
+  const { sameThing } = await import("../supabase/functions/_shared/dupes.ts");
+  const d = "2026-11-05T13:00:00+01:00";
+  ok(sameThing({ title: "SEB mortgage meeting with Carin Hacksell", due_at: d }, { title: "Attend SEB phone meeting with Carin Hacksell", due_at: "2026-11-05T15:00:00+01:00" }));
+  ok(!sameThing({ title: "Pay Amex", due_at: d }, { title: "Pay Ellevio", due_at: d }));
+  ok(!sameThing({ title: "Post on TikTok", due_at: d }, { title: "Post on Instagram", due_at: d }));
+  ok(!sameThing({ title: "Ring Johan om hyran", due_at: d }, { title: "Ring Johan om hyran", due_at: "2026-11-09T13:00:00+01:00" }), "a week apart = two things");
+  ok(!sameThing({ title: "Ring Johan om hyran", due_at: d }, { title: "Ring Johan om hyran", due_at: null }), "dated vs undated");
+  ok(sameThing({ title: "Köp tejp och kartonger", due_at: null }, { title: "köp kartonger + tejp", due_at: null }));
+});

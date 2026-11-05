@@ -13,6 +13,7 @@ export default function ItemCard({ item, lane, onChange, checklist, openFocus, c
   const [ticked, setTicked] = useState(false);
 
   const done = async () => {
+    if (busy || ticked) return; // one tap = one done (a repeating item must not skip a day)
     setBusy(true); setErr("");
     try {
       setTicked(true);
@@ -39,7 +40,7 @@ export default function ItemCard({ item, lane, onChange, checklist, openFocus, c
         {err && <div className="err">{err}</div>}
       </button>
       {checklist && <button className="ghost small" onClick={del} aria-label="Delete">✕</button>}
-      <button className={`tick${ticked ? " on" : ""}`} onClick={done} disabled={busy} aria-label={checklist ? "Bought" : "Done"}>✓</button>
+      <button className={`tick${ticked ? " on" : ""}`} onClick={done} disabled={busy || ticked} aria-label={checklist ? "Bought" : "Done"}>✓</button>
     </div>
   );
 }

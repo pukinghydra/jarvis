@@ -71,6 +71,7 @@ export default function Today({ lanes, refreshKey, onChange, openFocus, celebrat
   const pct = todayOpen + doneN ? Math.round((doneN / (todayOpen + doneN)) * 100) : 0;
 
   const quickDone = async (i) => {
+    if (busy) return;
     setBusy(i.id);
     try { await api("complete", { id: i.id }); celebrate?.(); changed(); } catch (e) { setErr(e.message); } finally { setBusy(""); }
   };
