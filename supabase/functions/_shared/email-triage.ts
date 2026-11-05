@@ -26,7 +26,7 @@ import { localDateStr, localTimeStr, weekdayName } from "./time.ts";
 import { normalizeItem, type LaneRef } from "./items-input.ts";
 import {
   DRAFT_SCHEMA, DRAFT_SYSTEM, MAX_DRAFTS_PER_RUN, TRIAGE_BATCH, TRIAGE_MAX_PER_RUN, TRIAGE_SCHEMA, TRIAGE_SYSTEM,
-  actionKey, draftPush, draftUser, shouldDraft, triageUser, urgentPush, validateDraft, validateTriage,
+  actionKey, draftUser, shouldDraft, triageUser, urgentPush, validateDraft, validateTriage,
   type Draft, type Triage, type TriageEmail,
 } from "./email-triage-core.ts";
 
@@ -147,8 +147,9 @@ async function triageLocked(now: Date, notify: boolean) {
     if (email.triage) must(await sb.from("items").delete().eq("email_id", id).eq("status", "open").eq("source", "email"), "replace email to-dos");
     if (t.importance === "noise" && (email.draft_id || email.triage)) await cleanupEmail(email, "noise");
 
-    // Action items, once per email + title.
-    if (t.actions.length) {
+    // Email has its own Mail tab now, so it no longer makes to-dos on its
+    // own. The one exception: a Vinted return VIC must send (his rule).
+    if (t.actions.length && t.vinted_return) {
       const existing = new Set(
         (must(await sb.from("items").select("title").eq("email_id", id), "email items") ?? []).map((r: any) => actionKey(id, r.title)),
       );
@@ -170,7 +171,7 @@ async function triageLocked(now: Date, notify: boolean) {
 
   if (notify && urgent.length) {
     const p = urgentPush(urgent);
-    await push({ ...p, url: "/?tab=today", tag: urgent.length === 1 ? `urgent-${urgent[0].id}` : "urgent-mail" });
+    await push({ ...p, url: "/?tab=mail", tag: urgent.length === 1 ? `urgent-${urgent[0].id}` : "urgent-mail" });
   }
 
   for (const e of backlog as any[]) {
@@ -217,6 +218,6 @@ async function writeDraftClaimed(email: any, t: Triage, notify: boolean): Promis
   const d: Draft | null = validateDraft(raw, t.reply_language);
   if (!d) return false;
   await draftReply(email.id, d.body, d.language, { source: "email", summary: d.summary_en ? `What it says: ${d.summary_en}` : undefined });
-  if (notify) await push({ ...draftPush(email, d), url: "/?tab=today", tag: `draft-${email.id}` });
+  // No push per draft: drafted mail waits in the Mail tab (fewer pushes).
   return true;
 }

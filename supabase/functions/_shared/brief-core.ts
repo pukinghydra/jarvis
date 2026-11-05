@@ -8,6 +8,7 @@ import { localDateStr, localTimeStr, shortWhen, weekdayName } from "./time.ts";
 export type BItem = {
   title: string; short_id: string; lane: string; due_at: string | null; all_day: boolean;
   proof_type: string; proof_domains: string[]; kind: string;
+  id?: string; emoji?: string | null; minutes?: number | null;
 };
 export type BEvent = { title: string; start_at: string; end_at: string | null; all_day: boolean; location: string | null; calendar: string; leave_by: string | null };
 
@@ -60,7 +61,7 @@ function eventLine(e: BEvent, showDate = false): string {
 
 const pct = (p: number | null) => (p == null ? "–" : `${p}%`);
 
-export function renderBrief(d: BriefData): { markdown: string; push_title: string; push_body: string } {
+export function renderBrief(d: BriefData): { markdown: string; push_title: string; push_body: string; first_id: string | null } {
   const L: string[] = [];
   const dateLabel = `${weekdayName(d.today)} ${shortWhen(new Date(`${d.today}T12:00:00Z`), true).replace(/^\w+ /, "")}`;
   L.push(`# ${d.weekly ? "Weekly review" : "Brief"} · ${dateLabel}`);
@@ -150,7 +151,7 @@ export function renderBrief(d: BriefData): { markdown: string; push_title: strin
 
   const bits: string[] = [];
   const dueCount = d.dueToday.length + d.pinned.length;
-  bits.push(`${dueCount} to do today`);
+  const first = firstThing(d);
   if (d.events.length) bits.push(`${d.events.length} in calendar`);
   if (d.pinned.length) bits.push(`${d.pinned.map((p) => p.title.replace(/\s*\(Thriftin\)\s*/i, "")).slice(0, 2).join(" + ")} not done`);
   if (d.overdue.length) bits.push(`${d.overdue.length} overdue`);
@@ -161,9 +162,23 @@ export function renderBrief(d: BriefData): { markdown: string; push_title: strin
   if (d.thriftin?.ordersToShip.length) bits.push(`${d.thriftin.ordersToShip.length} orders to ship`);
   return {
     markdown: L.join("\n"),
-    push_title: d.weekly ? `Weekly review · last week ${pct(d.stats.last_week.pct)}` : `Brief · 🔥 ${d.stats.streak} · ${pct(d.stats.this_week.pct)} this week`,
-    push_body: bits.join(" · "),
+    push_title: d.weekly ? `Weekly review · last week ${pct(d.stats.last_week.pct)}` : morningTitle(dueCount, first),
+    push_body: bits.join(" · ") || `🔥 ${d.stats.streak} day streak`,
+    first_id: first?.id ?? null,
   };
+}
+
+// The first thing to do today: the earliest timed to-do, else the first one.
+export function firstThing(d: Pick<BriefData, "dueToday" | "pinned">): BItem | null {
+  const todo = [...d.pinned, ...d.dueToday].filter((i) => i.kind !== "buy" && i.kind !== "event" && i.kind !== "birthday");
+  return todo.find((i) => !i.all_day && i.due_at) ?? todo[0] ?? null;
+}
+
+// "☀️ 3 things today. First: 📦 Return the coat (10 min)"
+export function morningTitle(count: number, first: BItem | null): string {
+  if (!count || !first) return "☀️ Nothing due today. Enjoy it";
+  const what = `${first.emoji ? `${first.emoji} ` : ""}${first.title}${first.minutes ? ` (${first.minutes} min)` : ""}`;
+  return `☀️ ${count} thing${count === 1 ? "" : "s"} today. First: ${what}`.slice(0, 120);
 }
 
 export const isMonday = (date: string) => weekdayName(date) === "Monday";

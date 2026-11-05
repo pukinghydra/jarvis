@@ -171,6 +171,9 @@ function handlers(source: ItemSource): Record<ToolName, Handler> {
         location: has("location") ? a.location : item.location,
         travel_minutes: has("travel_minutes") ? a.travel_minutes : item.travel_minutes,
         remind_again_minutes: has("remind_again_minutes") ? a.remind_again_minutes : item.remind_again_minutes,
+        emoji: has("emoji") ? a.emoji : item.emoji,
+        minutes: has("minutes") ? a.minutes : item.minutes,
+        first_step: has("first_step") ? a.first_step : item.first_step,
       };
       const r = normalizeItem(merged, ls);
       if (!r.ok) throw new Error(r.error);
@@ -262,7 +265,7 @@ function handlers(source: ItemSource): Record<ToolName, Handler> {
     },
     draft_reply: async (a) => {
       const r = await draftReply(String(a.message_id ?? ""), String(a.body ?? ""), a.language ? String(a.language) : null);
-      return `Draft saved in Outlook > Drafts (reply to ${r.to ?? "sender"}: ${r.subject ?? ""}). Not sent. Item [${r.item_id}] reminds VIC to send it at ${shortWhen(new Date(r.remind_at))}.`;
+      return `Draft saved in Outlook > Drafts (reply to ${r.to ?? "sender"}: ${r.subject ?? ""}). Not sent.${r.item_id && r.remind_at ? ` Item [${r.item_id}] reminds VIC to send it at ${shortWhen(new Date(r.remind_at))}.` : ""}`;
     },
     mark_email_handled: async (a) => {
       const r = await markEmailHandled(String(a.message_id ?? ""));

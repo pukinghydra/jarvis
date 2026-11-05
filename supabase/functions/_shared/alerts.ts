@@ -5,20 +5,13 @@
 import { sb, must, getSetting, claimOnce } from "./db.ts";
 import { push } from "./push.ts";
 import { addDays, diffDays, inLocalWindow, localDateStr, localTimeStr, shortWhen } from "./time.ts";
+import { reminderPush } from "./push-text.ts";
 
 export async function sendReminders(now: Date) {
   const { data, error } = await sb.rpc("claim_due_reminders", { p_now: now.toISOString() });
   if (error) throw new Error(`reminders: ${error.message}`);
   const due = (data ?? []) as any[];
-  for (const i of due) {
-    const proof = i.proof_type === "link" ? " · close it with the link" : i.proof_type === "photo" ? " · close it with a photo" : "";
-    await push({
-      title: i.title,
-      body: `${i.due_at ? (i.all_day ? "Today" : `Due ${shortWhen(new Date(i.due_at))}`) : "Reminder"}${i.location ? ` @ ${i.location}` : ""}${proof}`,
-      url: `/?tab=today&item=${i.id}`,
-      tag: `item-${i.id}`,
-    });
-  }
+  for (const i of due) await push(reminderPush(i, false));
   return due.length;
 }
 
@@ -29,9 +22,7 @@ export async function sendFollowups(now: Date) {
   const { data, error } = await sb.rpc("claim_followups", { p_now: now.toISOString() });
   if (error) throw new Error(`follow-ups: ${error.message}`);
   const due = (data ?? []) as any[];
-  for (const i of due) {
-    await push({ title: i.title, body: "Fortfarande inte klart. Gör det nu.", url: `/?tab=today&item=${i.id}`, tag: `item-${i.id}` });
-  }
+  for (const i of due) await push(reminderPush(i, true));
   return due.length;
 }
 

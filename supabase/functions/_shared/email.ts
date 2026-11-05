@@ -149,6 +149,9 @@ export async function draftReply(ref: string, body: string, language: string | n
     }).eq("id", email.id),
     "save draft",
   );
+  // Jarvis's own drafts wait in the Mail tab; only a draft VIC asked for
+  // (Claude app) also gets a "Send reply" to-do with a reminder.
+  if (opts.source === "email") return { email_id: email.short_id, draft_id: draft.id, item_id: null, remind_at: null, to: email.from_address, subject: email.subject };
   const { data: lane } = await sb.from("lanes").select("id").eq("slug", "inbox").maybeSingle();
   const sender = email.from_name || email.from_address || "sender";
   const remindAt = new Date(Date.now() + 2 * 3600_000).toISOString();

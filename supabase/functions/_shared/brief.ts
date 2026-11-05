@@ -13,7 +13,7 @@ import { hasClaude } from "./claude.ts";
 import { byImportance, mailCounts, sender } from "./email-triage-core.ts";
 import { type BEvent, type BItem, type BriefData, isMonday, renderBrief } from "./brief-core.ts";
 
-const COLS = "id, short_id, lane_id, kind, title, due_at, all_day, proof_type, proof_domains, location, travel_minutes";
+const COLS = "id, short_id, lane_id, kind, title, due_at, all_day, proof_type, proof_domains, location, travel_minutes, emoji, minutes";
 
 export async function gatherBrief(now: Date, weeklyOverride?: boolean): Promise<BriefData> {
   const today = localDateStr(now);
@@ -26,7 +26,7 @@ export async function gatherBrief(now: Date, weeklyOverride?: boolean): Promise<
   const lanes = new Map((must(await sb.from("lanes").select("id, name"), "lanes") ?? []).map((l: any) => [l.id, l.name]));
   const toB = (i: any): BItem => ({
     title: i.title, short_id: i.short_id, lane: lanes.get(i.lane_id) ?? "", due_at: i.due_at, all_day: i.all_day,
-    proof_type: i.proof_type, proof_domains: i.proof_domains ?? [], kind: i.kind,
+    proof_type: i.proof_type, proof_domains: i.proof_domains ?? [], kind: i.kind, id: i.id, emoji: i.emoji ?? null, minutes: i.minutes ?? null,
   });
 
   const open = must(await sb.from("items").select(COLS).eq("status", "open").lt("due_at", weekEnd).order("due_at"), "items") ?? [];
@@ -127,7 +127,7 @@ export async function runBrief(now: Date, opts: { push: boolean; weekly?: boolea
   must(await sb.from("briefs").upsert(row, { onConflict: "brief_date" }), "save brief");
   let pushed: unknown = null;
   if (opts.push) {
-    pushed = await push({ title: r.push_title, body: r.push_body, url: "/?tab=brief", tag: "brief" });
+    pushed = await push({ title: r.push_title, body: r.push_body, url: r.first_id ? `/?tab=today&item=${r.first_id}` : "/?tab=today", tag: "brief" });
     await sb.from("briefs").update({ pushed_at: new Date().toISOString() }).eq("brief_date", data.today);
   }
   return { date: data.today, weekly: data.weekly, pushed, markdown: r.markdown };

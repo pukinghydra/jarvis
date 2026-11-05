@@ -20,6 +20,9 @@ export type ItemInput = {
   location?: unknown;
   travel_minutes?: unknown;
   remind_again_minutes?: unknown;
+  emoji?: unknown;
+  minutes?: unknown;
+  first_step?: unknown;
 };
 
 export type ItemRowIn = {
@@ -36,6 +39,9 @@ export type ItemRowIn = {
   location: string | null;
   travel_minutes: number | null;
   remind_again_minutes: number | null;
+  emoji: string | null;
+  minutes: number | null;
+  first_step: string | null;
 };
 
 const KINDS = ["task", "reminder", "buy", "birthday", "event"];
@@ -134,6 +140,22 @@ export function normalizeItem(input: ItemInput, lanes: LaneRef[]): { ok: true; r
       location: str(input.location).slice(0, 300) || null,
       travel_minutes: travel,
       remind_again_minutes: again,
+      emoji: cleanEmoji(input.emoji),
+      minutes: cleanMinutes(input.minutes),
+      first_step: str(input.first_step).replace(/\s+/g, " ").slice(0, 200) || null,
     },
   };
+}
+
+// One emoji (or a short emoji sequence); never letters or digits.
+export function cleanEmoji(v: unknown): string | null {
+  const s = str(v);
+  if (!s || s.length > 16 || /[\p{L}\p{N}]/u.test(s)) return null;
+  return s;
+}
+
+// Minutes it takes: a whole number 1-600 (a string "10" is fine).
+export function cleanMinutes(v: unknown): number | null {
+  const n = typeof v === "string" ? Number(v) : v;
+  return typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= 600 ? n : null;
 }

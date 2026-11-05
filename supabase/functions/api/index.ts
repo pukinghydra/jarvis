@@ -4,7 +4,7 @@
 // config.toml).
 //
 // POST {action, ...}:
-//   complete {id, proof_url?, proof_path?}   skip {id, reason}
+//   complete {id, proof_url?, proof_path?}   skip {id, reason}   split {id}
 //   stats    status    vapid    push_test
 //   ms_start (-> Microsoft sign-in URL)    ms_disconnect
 //   scan_now (fetch + AI triage when a key is set)    style_relearn
@@ -15,6 +15,7 @@ import { SUPABASE_URL } from "../_shared/env.ts";
 import { config } from "../_shared/config.ts";
 import { HttpError, requireOwner } from "../_shared/db.ts";
 import { completeItem, skipItem, stats } from "../_shared/items.ts";
+import { splitItem } from "../_shared/split.ts";
 import { push } from "../_shared/push.ts";
 import { msDisconnect, msStatus, redirectUri } from "../_shared/graph.ts";
 import { signState } from "../_shared/crypto.ts";
@@ -44,6 +45,8 @@ Deno.serve(async (req) => {
         return json(await completeItem(String(b.id ?? ""), { proof_url: b.proof_url ?? null, proof_path: b.proof_path ?? null }));
       case "skip":
         return json(await skipItem(String(b.id ?? ""), String(b.reason ?? "")));
+      case "split":
+        return json(await splitItem(String(b.id ?? "")));
       case "stats":
         return json(await stats(now));
       case "status": {
