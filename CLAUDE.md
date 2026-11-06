@@ -33,3 +33,4 @@ inside a sentence.
 
 - Every popup / sheet closes with a swipe left: use `useSwipeClose` from `web/src/lib/swipe.js` on the panel, plus a visible ✕.
 - App UI text is English; content (emails, titles, notes, drafts) stays in its own language and is never translated.
+- Jarvis tool definitions are frozen (`tests/tool-freeze.test.ts`): changing a tool's name, description or a top-level parameter's name/description makes the Claude app ask VIC for approval again on every call to it ("Always allow" is keyed on them). Don't, unless VIC agrees; then update `tests/tool-freeze.json` and tell him which tools will ask once more.
