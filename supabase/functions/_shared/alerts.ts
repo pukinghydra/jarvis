@@ -7,12 +7,23 @@ import { push } from "./push.ts";
 import { addDays, diffDays, inLocalWindow, localDateStr, localTimeStr, shortWhen } from "./time.ts";
 import { reminderPush } from "./push-text.ts";
 
+// A push no phone received is tried again next minute (for 15 minutes),
+// instead of being marked as reminded and lost. Every result is logged.
+const RETRY_MS = 15 * 60_000;
+
 export async function sendReminders(now: Date) {
   const { data, error } = await sb.rpc("claim_due_reminders", { p_now: now.toISOString() });
   if (error) throw new Error(`reminders: ${error.message}`);
   const due = (data ?? []) as any[];
-  for (const i of due) await push(reminderPush(i, false));
-  return due.length;
+  const out: any[] = [];
+  for (const i of due) {
+    const r: any = await push(reminderPush(i, false));
+    const retry = !r.sent && now.getTime() - Date.parse(i.remind_at) < RETRY_MS;
+    if (retry) await sb.from("items").update({ reminded_at: null }).eq("id", i.id);
+    out.push({ item: i.short_id ?? String(i.id).slice(0, 8), ...r, ...(retry ? { retry: true } : {}) });
+  }
+  if (out.length) console.log("reminder pushes", JSON.stringify(out));
+  return out.length ? out : 0;
 }
 
 // Second push for items with remind_again_minutes that are still open that
@@ -22,7 +33,14 @@ export async function sendFollowups(now: Date) {
   const { data, error } = await sb.rpc("claim_followups", { p_now: now.toISOString() });
   if (error) throw new Error(`follow-ups: ${error.message}`);
   const due = (data ?? []) as any[];
-  for (const i of due) await push(reminderPush(i, true));
+  const out: any[] = [];
+  for (const i of due) {
+    const r: any = await push(reminderPush(i, true));
+    const retry = !r.sent && now.getTime() - (Date.parse(i.remind_at) + Number(i.remind_again_minutes) * 60_000) < RETRY_MS;
+    if (retry) await sb.from("items").update({ reminded_again_at: null }).eq("id", i.id);
+    out.push({ item: i.short_id ?? String(i.id).slice(0, 8), ...r, ...(retry ? { retry: true } : {}) });
+  }
+  if (out.length) console.log("follow-up pushes", JSON.stringify(out));
   return due.length;
 }
 

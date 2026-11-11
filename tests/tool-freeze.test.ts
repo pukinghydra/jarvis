@@ -1,6 +1,11 @@
+// @ts-ignore Node built-in (tests run in Node; the typecheck has no Node types)
 import { createHash } from "node:crypto";
+// @ts-ignore Node built-in
 import { readFileSync } from "node:fs";
+// @ts-ignore Node built-in
 import { join } from "node:path";
+
+declare const process: { cwd(): string };
 import { suite, eq } from "./t.ts";
 import { TOOL_DEFS } from "../supabase/functions/_shared/tool-defs.ts";
 

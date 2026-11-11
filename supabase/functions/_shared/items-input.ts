@@ -45,6 +45,7 @@ export type ItemRowIn = {
 };
 
 const KINDS = ["task", "reminder", "buy", "birthday", "event"];
+export const DEFAULT_AGAIN = 10;
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 
 // "2026-11-06" -> all day; "2026-11-06T14:00" -> Stockholm time;
@@ -122,7 +123,11 @@ export function normalizeItem(input: ItemInput, lanes: LaneRef[]): { ok: true; r
   const tm = input.travel_minutes;
   const travel = typeof tm === "number" && Number.isInteger(tm) && tm >= 0 && tm <= 600 ? tm : null;
   const ra = typeof input.remind_again_minutes === "string" ? Number(input.remind_again_minutes) : input.remind_again_minutes;
-  const again = typeof ra === "number" && Number.isInteger(ra) && ra >= 5 && ra <= 720 && remindAt ? ra : null;
+  // A reminder nudges a second time 10 minutes later if it isn't done yet
+  // (a silent banner is easy to miss). An explicit value, or null, wins.
+  const again = !remindAt ? null
+    : input.remind_again_minutes === undefined ? DEFAULT_AGAIN
+    : typeof ra === "number" && Number.isInteger(ra) && ra >= 5 && ra <= 720 ? ra : null;
 
   return {
     ok: true,

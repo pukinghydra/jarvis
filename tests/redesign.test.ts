@@ -78,3 +78,15 @@ test("emails: Claude can find any email (handled too) and link it to a to-do", a
   ok((ITEM_SCHEMA as any).properties.email_id, "add_task can link an email");
   ok(/handled and old mail and Hotmail itself/.test(INSTRUCTIONS));
 });
+
+test("reminders: a second nudge 10 min later by default; explicit value or null wins; none without a reminder", () => {
+  const at = "2026-11-10T17:30:00+01:00";
+  const a: any = normalizeItem({ title: "Hämta jacka och lås dörren", lane: "thriftin", kind: "reminder", due_at: at, remind_at: at }, lanes);
+  eq(a.row.remind_again_minutes, 10);
+  const b: any = normalizeItem({ title: "Post on TikTok", remind_at: at, remind_again_minutes: 60 }, lanes);
+  eq(b.row.remind_again_minutes, 60);
+  const c: any = normalizeItem({ title: "x", remind_at: at, remind_again_minutes: null }, lanes);
+  eq(c.row.remind_again_minutes, null);
+  const d: any = normalizeItem({ title: "Köp tejp" }, lanes);
+  eq(d.row.remind_again_minutes, null);
+});

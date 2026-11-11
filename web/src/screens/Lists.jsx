@@ -42,7 +42,7 @@ export default function Lists({ lanes, reloadLanes, refreshKey, onChange, openFo
       }
       must(await supabase.from("items").insert({
         lane_id: lane.id, title: form.title.trim(), kind: lane.slug === "buy" ? "buy" : "task", due_at, all_day,
-        remind_at: due_at && !all_day ? due_at : null, source: "app",
+        remind_at: due_at && !all_day ? due_at : null, remind_again_minutes: due_at && !all_day ? 10 : null, source: "app",
       }));
       setForm({ title: "", date: "", time: "" });
       load(); onChange?.();
