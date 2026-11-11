@@ -183,3 +183,6 @@ button.pill { padding: 7px 13px; }
 .status-list { margin: 0; padding-left: 18px; color: var(--soft); }
 .login { display: grid; gap: 10px; max-width: 360px; padding-top: 18vh; }
 .login h1 { text-align: center; font-weight: 900; }
+
+/* A short note when something couldn't be saved (tap to hide) */
+.toast { position: fixed; left: 16px; right: 16px; top: calc(12px + env(safe-area-inset-top)); z-index: 50; max-width: 520px; margin: 0 auto; background: var(--red); color: #fff; white-space: normal; text-align: left; border-radius: 18px; box-shadow: var(--shadow); }

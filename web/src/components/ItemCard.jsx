@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api, supabase, must } from "../lib/supabase.js";
 import { when } from "../lib/time.js";
 import { emojiFor } from "../lib/emoji.js";
+import { haptic } from "../lib/haptic.js";
 
 const RECUR = { daily: "every day", weekdays: "weekdays", weekly: "every week", monthly: "every month", yearly: "every year" };
 
@@ -15,10 +16,11 @@ export default function ItemCard({ item, lane, onChange, checklist, openFocus, c
   const done = async () => {
     if (busy || ticked) return; // one tap = one done (a repeating item must not skip a day)
     setBusy(true); setErr("");
+    haptic();
+    setTicked(true);
+    if (!checklist) celebrate?.();
     try {
-      setTicked(true);
       await api("complete", { id: item.id });
-      if (!checklist) celebrate?.();
       setTimeout(() => onChange?.(), checklist ? 350 : 0);
     } catch (e) { setTicked(false); setErr(e.message); } finally { setBusy(false); }
   };

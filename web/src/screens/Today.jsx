@@ -4,6 +4,7 @@ import { addDaysStr, startOfDay, time, todayStr } from "../lib/time.js";
 import { emojiFor } from "../lib/emoji.js";
 import { snoozePatch } from "../lib/snooze.js";
 import SnoozeSheet from "../components/SnoozeSheet.jsx";
+import { haptic } from "../lib/haptic.js";
 
 // Today as a soft timeline: what's done fades, a red "now" line, and the
 // next thing opens big with Start / Done / Not now. Things from earlier
@@ -73,7 +74,8 @@ export default function Today({ lanes, refreshKey, onChange, openFocus, celebrat
   const quickDone = async (i) => {
     if (busy) return;
     setBusy(i.id);
-    try { await api("complete", { id: i.id }); celebrate?.(); changed(); } catch (e) { setErr(e.message); } finally { setBusy(""); }
+    haptic(); celebrate?.();
+    try { await api("complete", { id: i.id }); changed(); } catch (e) { setErr(`Couldn't save Done: ${e.message}`); } finally { setBusy(""); }
   };
   const pickSnooze = async (at) => {
     try { must(await supabase.from("items").update(snoozePatch(snoozing, at)).eq("id", snoozing.id)); setSnoozing(null); changed(); } catch (e) { setErr(e.message); }

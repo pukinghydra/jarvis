@@ -31,6 +31,7 @@ export default function App() {
   const [cheer, setCheer] = useState(false);
   const [stats, setStats] = useState(null);
   const [mailCount, setMailCount] = useState(0);
+  const [toast, setToast] = useState("");
   const bump = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   useEffect(() => startTheme(), []);
@@ -112,10 +113,14 @@ export default function App() {
           autoStart={focus.auto}
           onClose={() => setFocus(null)}
           onChanged={bump}
-          onDone={() => { setFocus(null); setCheer(true); bump(); }}
+          onDone={(_item, saving) => {
+            setFocus(null); setCheer(true);
+            saving.then(bump).catch((e) => { setToast(`Couldn't save Done: ${e.message}. Try again.`); bump(); });
+          }}
         />
       )}
       {cheer && <Celebrate streak={stats?.streak} onEnd={endCheer} />}
+      {toast && <button className="toast" onClick={() => setToast("")}>{toast} ✕</button>}
     </div>
   );
 }

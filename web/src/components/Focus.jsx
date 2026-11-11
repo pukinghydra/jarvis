@@ -5,6 +5,7 @@ import { emojiFor } from "../lib/emoji.js";
 import { when } from "../lib/time.js";
 import { snoozePatch } from "../lib/snooze.js";
 import { openInMailHref } from "../lib/mailto.js";
+import { haptic } from "../lib/haptic.js";
 import * as timer from "../lib/focus-timer.js";
 import SnoozeSheet from "./SnoozeSheet.jsx";
 
@@ -39,11 +40,13 @@ export default function Focus({ item: initial, lane, autoStart, onClose, onChang
     setBusy(name); setErr("");
     try { await fn(); } catch (e) { setErr(e.message); } finally { setBusy(""); }
   };
-  const done = () => run("done", async () => {
-    await api("complete", { id: item.id });
+  // Confetti and a buzz the moment Done is tapped; saving happens behind it.
+  const done = () => {
+    if (busy) return;
+    haptic();
     timer.clear(item.id); timer.saveTicked(item.id, []);
-    onDone?.(item);
-  });
+    onDone?.(item, api("complete", { id: item.id }));
+  };
   const pickSnooze = (at) => run("snooze", async () => {
     must(await supabase.from("items").update(snoozePatch(item, at)).eq("id", item.id));
     setSnooze(false); timer.clear(item.id);
