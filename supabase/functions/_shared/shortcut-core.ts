@@ -61,3 +61,11 @@ export async function guessAudioType(f: Blob, name = ""): Promise<string> {
   const ext = name.toLowerCase().split(".").pop() ?? "";
   return ({ m4a: "audio/mp4", mp4: "audio/mp4", wav: "audio/wav", mp3: "audio/mpeg", ogg: "audio/ogg", webm: "audio/webm", caf: "" } as Record<string, string>)[ext] ?? "";
 }
+
+// The alarms the iPhone shortcut creates in the Clock app: Stockholm "HH:MM"
+// strings, earliest first, no duplicates (a Clock alarm is a time of day).
+export function alarmTimes(rows: { remind_at: string | null }[]): string[] {
+  const f = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Stockholm", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  const sorted = rows.filter((r) => r.remind_at).sort((a, b) => Date.parse(a.remind_at!) - Date.parse(b.remind_at!));
+  return [...new Set(sorted.map((r) => f.format(new Date(r.remind_at!))))];
+}

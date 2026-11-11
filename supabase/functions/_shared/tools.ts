@@ -209,12 +209,13 @@ function handlers(source: ItemSource): Record<ToolName, Handler> {
         emoji: has("emoji") ? a.emoji : item.emoji,
         minutes: has("minutes") ? a.minutes : item.minutes,
         first_step: has("first_step") ? a.first_step : item.first_step,
+        alarm: item.alarm === true,
       };
       const r = normalizeItem(merged, ls);
       if (!r.ok) throw new Error(r.error);
       const patch: any = { ...r.row };
       if (has("email_id")) patch.email_id = a.email_id ? (await resolveEmail(String(a.email_id))).id : null;
-      if (patch.remind_at !== item.remind_at) { patch.reminded_at = null; patch.reminded_again_at = null; }
+      if (patch.remind_at !== item.remind_at) { patch.reminded_at = null; patch.reminded_again_at = null; patch.alarm_synced_at = null; }
       const saved = must(await sb.from("items").update(patch).eq("id", item.id).select(ITEM_COLS), "update item") ?? [];
       return `Updated: ${line(saved[0] ?? item, new Map(ls.map((l) => [l.id, l.name])))}`;
     },

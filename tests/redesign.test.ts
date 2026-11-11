@@ -90,3 +90,15 @@ test("reminders: a second nudge 10 min later by default; explicit value or null 
   const d: any = normalizeItem({ title: "Köp tejp" }, lanes);
   eq(d.row.remind_again_minutes, null);
 });
+
+test("alarms: 'alarm' needs an exact time; times for the Clock app are Stockholm HH:MM, earliest first, no doubles", async () => {
+  const { alarmTimes } = await import("../supabase/functions/_shared/shortcut-core.ts");
+  const at = "2026-11-10T17:30:00+01:00";
+  const a: any = normalizeItem({ title: "Hämta jacka och lås dörren", lane: "thriftin", alarm: true, due_at: at, remind_at: at }, lanes);
+  eq([a.row.alarm, a.row.kind], [true, "reminder"]);
+  const b: any = normalizeItem({ title: "Väck mig", alarm: true, due_at: "2026-11-12" }, lanes);
+  eq(b.row.alarm, false, "a date without a time can't ring");
+  const c: any = normalizeItem({ title: "Ring Johan", remind_at: at }, lanes);
+  eq(c.row.alarm, false);
+  eq(alarmTimes([{ remind_at: "2026-11-12T05:45:00Z" }, { remind_at: at }, { remind_at: "2026-11-10T16:30:00Z" }, { remind_at: null }]), ["17:30", "06:45"]);
+});

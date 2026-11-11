@@ -94,6 +94,19 @@ export default function Settings({ session, onBack }) {
       </section>
 
       <section>
+        <h3>⏰ Real alarms (iPhone Clock)</h3>
+        <p className="muted small">When you say "alarm" to Claude, Jarvis makes it ring in the Clock app, even on silent. One-time setup in the Shortcuts app (about 3 min):</p>
+        <ol className="muted small" style={{ paddingLeft: 18, margin: "6px 0" }}>
+          <li>Automation → + → App → Claude → Is Closed → Run Immediately → Next → New Blank Automation.</li>
+          <li>Add "Get Contents of URL" and paste the alarm link (button below).</li>
+          <li>Add "Repeat with Each" (it uses Contents of URL).</li>
+          <li>Inside it, add "Create Alarm": Time = Repeat Item, Label = Jarvis.</li>
+          <li>Tap ▶ once so iPhone asks to allow the connection. Allow.</li>
+        </ol>
+        <button className="primary" onClick={() => copy(owner?.alarm_url, "alarm")} disabled={!owner?.alarm_url}>{copiedWhat === "alarm" ? "Copied ✓" : "Copy alarm link"}</button>
+      </section>
+
+      <section>
         <h3>Jarvis Talk shortcut (iPhone)</h3>
         <p className="muted small">Talk to Jarvis with Apple's dictation: home-screen icon, Action Button or "Hey Siri, Jarvis". Copy these two into the shortcut. Keep the key secret.</p>
         <div className="row">

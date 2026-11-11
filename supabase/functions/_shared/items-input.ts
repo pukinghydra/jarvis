@@ -23,6 +23,7 @@ export type ItemInput = {
   emoji?: unknown;
   minutes?: unknown;
   first_step?: unknown;
+  alarm?: unknown;
 };
 
 export type ItemRowIn = {
@@ -42,6 +43,7 @@ export type ItemRowIn = {
   emoji: string | null;
   minutes: number | null;
   first_step: string | null;
+  alarm: boolean;
 };
 
 const KINDS = ["task", "reminder", "buy", "birthday", "event"];
@@ -80,6 +82,7 @@ export function normalizeItem(input: ItemInput, lanes: LaneRef[]): { ok: true; r
 
   let kind = str(input.kind).toLowerCase() || "task";
   if (!KINDS.includes(kind)) return { ok: false, error: `kind must be one of ${KINDS.join(", ")}` };
+  if (input.alarm === true && kind === "task") kind = "reminder";
 
   const laneKey = str(input.lane).toLowerCase();
   let lane = lanes.find((l) => l.slug === laneKey || l.name.toLowerCase() === laneKey);
@@ -148,6 +151,8 @@ export function normalizeItem(input: ItemInput, lanes: LaneRef[]): { ok: true; r
       emoji: cleanEmoji(input.emoji),
       minutes: cleanMinutes(input.minutes),
       first_step: str(input.first_step).replace(/\s+/g, " ").slice(0, 200) || null,
+      // A real Clock alarm needs an exact time (an all-day date can't ring).
+      alarm: input.alarm === true && !!remindAt && !(remind ? remind.allDay : due ? due.allDay : true),
     },
   };
 }

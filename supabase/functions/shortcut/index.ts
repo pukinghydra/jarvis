@@ -13,7 +13,8 @@ import { chatSay } from "../_shared/chat.ts";
 import { config } from "../_shared/config.ts";
 import { errorText } from "../_shared/http.ts";
 import { NO_PROVIDER, checkAudio, chooseProvider, sttRequest, transcriptText } from "../_shared/transcribe-core.ts";
-import { answerText, givenKey, guessAudioType, keyOk, readText } from "../_shared/shortcut-core.ts";
+import { alarmTimes, answerText, givenKey, guessAudioType, keyOk, readText } from "../_shared/shortcut-core.ts";
+import { sb } from "../_shared/db.ts";
 
 const textResponse = (body: string, status = 200) =>
   new Response(body, { status, headers: { "Content-Type": "text/plain; charset=utf-8" } });
@@ -52,7 +53,21 @@ async function heard(req: Request): Promise<string> {
   return transcriptText(body);
 }
 
+// GET ?alarms=1&key=<ALARM_KEY>: the alarms of the next 24 h as a JSON list
+// of "HH:MM" (Stockholm), each handed out once. The iPhone automation loops
+// over it with "Create Alarm". The alarm key can do nothing else.
+async function alarms(req: Request): Promise<Response> {
+  const stored = await appSecret("ALARM_KEY").catch(() => "");
+  if (!keyOk(givenKey(req), stored)) return textResponse("Wrong or missing alarm key. Copy the alarm link again from Jarvis → Settings.", 401);
+  const { data, error } = await sb.rpc("claim_alarms", { p_now: new Date().toISOString() });
+  if (error) { console.error("alarms:", error.message); return textResponse("[]", 500); }
+  const times = alarmTimes((data ?? []) as any[]);
+  console.log("alarms handed to the iPhone", JSON.stringify(times));
+  return new Response(JSON.stringify(times), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+}
+
 Deno.serve(async (req) => {
+  if (req.method === "GET" && new URL(req.url).searchParams.has("alarms")) return await alarms(req);
   if (req.method !== "POST") return textResponse("Use POST.", 405);
   const stored = await appSecret("SHORTCUT_KEY").catch(() => "");
   if (!keyOk(givenKey(req), stored)) return textResponse("Wrong or missing Jarvis key. Copy it again from Jarvis → Settings.", 401);
