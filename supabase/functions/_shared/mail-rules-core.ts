@@ -253,3 +253,22 @@ export function appendRule(rules: unknown, rule: string): string {
   const n = (base.match(/^\d+\./gm) ?? []).length + 1;
   return `${base}\n${n}. ${r}`;
 }
+
+// Writing a reply draft can flip the original email to "read" in Outlook
+// (Exchange does it on createReply; reported, not documented). VIC must still
+// see it as unread, so: if it was unread before, set it unread again right
+// away, and once more a few seconds later if Exchange flipped it late.
+export async function keepUnread(io: {
+  isRead: () => Promise<boolean | null>;
+  markUnread: () => Promise<void>;
+  wait: (ms: number) => Promise<void>;
+}): Promise<"restored" | "rechecked" | "failed"> {
+  try {
+    await io.markUnread();
+    await io.wait(4000);
+    if ((await io.isRead()) === true) { await io.markUnread(); return "rechecked"; }
+    return "restored";
+  } catch {
+    return "failed";
+  }
+}

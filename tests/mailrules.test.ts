@@ -181,3 +181,15 @@ test("rules go to Claude as VIC's own instructions, outside the email data", () 
   ok(!u.slice(0, u.indexOf("Now in Stockholm")).includes("<email"), "rules can't open or close an email block");
   eq(triageUser([], "t").startsWith("Now in Stockholm"), true, "no rules: no rules block");
 });
+
+test("drafts keep the original unread: restored at once, and again if Exchange flips it late", async () => {
+  const { keepUnread } = await import("../supabase/functions/_shared/mail-rules-core.ts");
+  const run = async (readAfterWait: boolean) => {
+    let patches = 0, waited = 0;
+    const r = await keepUnread({ isRead: async () => readAfterWait, markUnread: async () => { patches++; }, wait: async (ms) => { waited = ms; } });
+    return { r, patches, waited };
+  };
+  eq(await run(false), { r: "restored", patches: 1, waited: 4000 });
+  eq(await run(true), { r: "rechecked", patches: 2, waited: 4000 });
+  eq(await keepUnread({ isRead: async () => null, markUnread: async () => { throw new Error("403"); }, wait: async () => {} }), "failed");
+});

@@ -5,6 +5,7 @@
 // access (offline_access). No Mail.Send: Jarvis can't send email even if it
 // tried. No calendar: VIC's calendars are iCloud (calendar.ts).
 
+import { keepUnread } from "./mail-rules-core.ts";
 import { SUPABASE_URL } from "./env.ts";
 import { config } from "./config.ts";
 import { sb } from "./db.ts";
@@ -248,11 +249,23 @@ export async function deleteMessage(id: string): Promise<void> {
 
 // Save a reply as a DRAFT in Outlook (Drafts folder). The text goes above
 // the quoted original. Returns the draft's id and an Outlook link to it.
+// The original stays as VIC left it: an unread email stays unread.
 export async function createReplyDraft(messageId: string, text: string): Promise<{ id: string; webLink: string | null }> {
-  const d = await graph(`/me/messages/${encodeURIComponent(messageId)}/createReply`, {
+  const path = `/me/messages/${encodeURIComponent(messageId)}`;
+  const isRead = async () => { const m = await graph(`${path}?$select=isRead`).catch(() => null); return typeof m?.isRead === "boolean" ? m.isRead : null; };
+  const wasUnread = (await isRead()) === false;
+  const d = await graph(`${path}/createReply`, {
     method: "POST",
     body: JSON.stringify({ comment: text }),
   });
+  if (wasUnread) {
+    const r = await keepUnread({
+      isRead,
+      markUnread: async () => { await graph(path, { method: "PATCH", body: JSON.stringify({ isRead: false }) }); },
+      wait: (ms) => new Promise((ok) => setTimeout(ok, ms)),
+    });
+    if (r === "failed") console.error("draft: couldn't keep the original unread", messageId.slice(-12));
+  }
   return { id: d.id, webLink: d.webLink ?? null };
 }
 
