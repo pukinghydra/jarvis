@@ -134,8 +134,14 @@ button.pill { padding: 7px 13px; }
 .mc .button-link.soft { background: color-mix(in srgb, var(--surface) 80%, transparent); color: var(--ink); }
 .mc .link { background: none; color: var(--soft); font-size: 14px; min-height: 0; padding: 10px 0 0; width: 100%; }
 .dots { display: flex; justify-content: center; gap: 6px; margin: 14px 0; }
-.dots i { width: 8px; height: 8px; border-radius: 4px; background: var(--line); }
-.dots i.on { width: 22px; background: var(--go); }
+.dots i, .dots button { width: 8px; height: 8px; min-height: 0; padding: 0; border-radius: 4px; background: var(--line); }
+.dots i.on, .dots button.on { width: 22px; background: var(--go); }
+/* Mail cards: swipe left/right; the next card slides in from that side */
+.mc { touch-action: pan-y; will-change: transform; }
+.mc.in-right { animation: in-right .2s ease-out; }
+.mc.in-left { animation: in-left .2s ease-out; }
+@keyframes in-right { from { transform: translateX(60%); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes in-left { from { transform: translateX(-60%); opacity: 0; } to { transform: none; opacity: 1; } }
 .quiet { background: var(--surface); border-radius: 20px; padding: 14px 16px; font-size: 14px; color: var(--soft); display: flex; gap: 10px; align-items: center; }
 .quiet b { color: var(--ink); }
 

@@ -3,6 +3,7 @@ import { supabase, must } from "../lib/supabase.js";
 import { dayLabel, time } from "../lib/time.js";
 import { mailtoForEmail, openInMailHref } from "../lib/mailto.js";
 import EmailSheet from "../components/EmailSheet.jsx";
+import { useSwipeNav } from "../lib/swipe.js";
 
 // Only the email that needs VIC, one card at a time. Everything else was
 // sorted quietly. Content stays in its own language.
@@ -26,6 +27,7 @@ export default function Mail({ refreshKey, onChange }) {
   const [rows, setRows] = useState(null);
   const [quiet, setQuiet] = useState(0);
   const [idx, setIdx] = useState(0);
+  const [from, setFrom] = useState("");   // which side the new card slides in from
   const [err, setErr] = useState("");
   const [reading, setReading] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -58,9 +60,15 @@ export default function Mail({ refreshKey, onChange }) {
     } catch (x) { setErr(x.message); } finally { setBusy(false); }
   };
 
+  const rowsN = rows?.length ?? 0;
+  const swipeNav = useSwipeNav(
+    () => { if (rowsN > 1) { setFrom("right"); setIdx((i) => (i + 1) % rowsN); } },
+    () => { if (rowsN > 1) { setFrom("left"); setIdx((i) => (i - 1 + rowsN) % rowsN); } },
+  );
   if (!rows) return <div className="screen muted center">{err || "…"}</div>;
   const n = rows.length;
   const e = rows[idx];
+  const go = (step) => { if (n < 2) return; setFrom(step > 0 ? "right" : "left"); setIdx((i) => (i + step + n) % n); };
   const mins = rows.reduce((s, r) => s + (r.draft_text ? 3 : 2), 0);
 
   return (
@@ -71,7 +79,7 @@ export default function Mail({ refreshKey, onChange }) {
       {err && <div className="err">{err}</div>}
 
       {e && (
-        <div className={`mc${e.importance === "urgent" ? " urgent" : ""}`}>
+        <div key={e.id} className={`mc${e.importance === "urgent" ? " urgent" : ""}${from ? ` in-${from}` : ""}`} {...(n > 1 ? swipeNav : {})}>
           <div className="who"><span className="av">{avatar(e)}</span><div><b>{e.from_name || e.from_address}</b><span>{dayLabel(e.received_at)} {time(e.received_at)}{e.importance === "urgent" ? " · urgent" : ""}</span></div></div>
           <h3>{e.subject || "(no subject)"}</h3>
           <p>{e.summary || e.preview}</p>
@@ -80,11 +88,12 @@ export default function Mail({ refreshKey, onChange }) {
           <button className="b soft" onClick={() => handled(e)} disabled={busy}>✓ Done with it</button>
           <div className="row" style={{ justifyContent: "space-between", margin: "4px 0 0" }}>
             <button className="link" style={{ width: "auto" }} onClick={() => setReading(e.id)}>Read it here</button>
-            {n > 1 && <button className="link" style={{ width: "auto" }} onClick={() => setIdx((idx + 1) % n)}>Next ›</button>}
+            {n > 1 && <span><button className="link" style={{ width: "auto", marginRight: 18 }} onClick={() => go(-1)}>‹ Back</button><button className="link" style={{ width: "auto" }} onClick={() => go(1)}>Next ›</button></span>}
           </div>
         </div>
       )}
-      {n > 1 && <div className="dots">{rows.slice(0, 8).map((r, i) => <i key={r.id} className={i === idx ? "on" : ""} />)}</div>}
+      {n > 1 && <div className="dots">{rows.slice(0, 12).map((r, i) => <button key={r.id} className={i === idx ? "on" : ""} onClick={() => { setFrom(i > idx ? "right" : "left"); setIdx(i); }} aria-label={`Email ${i + 1} of ${n}`} />)}</div>}
+      {n > 1 && <div className="muted small center" style={{ marginTop: -6, marginBottom: 12 }}>{idx + 1} of {n} · swipe for the next</div>}
       {quiet > 0 && <div className="quiet" style={{ marginTop: n ? 0 : 8 }}><span style={{ fontSize: 20 }}>🤫</span><div><b>{quiet} sorted quietly</b><br />Newsletters, notifications, things that don't need you</div></div>}
       {reading && <EmailSheet id={reading} onClose={() => setReading(null)} onChange={() => { load(); onChange?.(); }} />}
     </div>

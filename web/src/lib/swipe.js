@@ -44,3 +44,45 @@ export function useSwipeClose(onClose) {
   };
   return { onTouchStart, onTouchMove, onTouchEnd, onTouchCancel: onTouchEnd };
 }
+
+// Swipe a card sideways to page through a stack: left = next, right =
+// previous. The card follows the finger, flies out past ~70px (or a quick
+// flick) and the next one slides in; otherwise it snaps back. Vertical
+// scrolling is left alone.
+export function useSwipeNav(onNext, onPrev) {
+  const s = useRef(null);
+  const onTouchStart = (e) => {
+    const t = e.touches[0];
+    s.current = { x: t.clientX, y: t.clientY, t: Date.now(), dx: 0, horizontal: null };
+  };
+  const onTouchMove = (e) => {
+    const st = s.current;
+    if (!st) return;
+    const t = e.touches[0];
+    const dx = t.clientX - st.x, dy = t.clientY - st.y;
+    if (st.horizontal === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) st.horizontal = Math.abs(dx) > Math.abs(dy);
+    if (!st.horizontal) return;
+    st.dx = dx;
+    const node = e.currentTarget;
+    node.style.transition = "none";
+    node.style.transform = `translateX(${dx}px) rotate(${dx / 40}deg)`;
+  };
+  const onTouchEnd = (e) => {
+    const st = s.current;
+    s.current = null;
+    if (!st || !st.horizontal) return;
+    const node = e.currentTarget;
+    const fast = Math.abs(st.dx) > 35 && Date.now() - st.t < 250;
+    if (Math.abs(st.dx) > 70 || fast) {
+      const left = st.dx < 0;
+      node.style.transition = "transform .16s ease-out, opacity .16s ease-out";
+      node.style.transform = `translateX(${left ? -120 : 120}%) rotate(${left ? -8 : 8}deg)`;
+      node.style.opacity = "0";
+      setTimeout(() => (left ? onNext() : onPrev()), 150);
+    } else {
+      node.style.transition = "transform .2s ease-out";
+      node.style.transform = "";
+    }
+  };
+  return { onTouchStart, onTouchMove, onTouchEnd, onTouchCancel: onTouchEnd };
+}
